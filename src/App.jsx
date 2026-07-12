@@ -9,9 +9,9 @@ import { generateGroups } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
 export default function App() {
-  const [view, setView]           = useState('home')
+  const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
-  const [groups, setGroups]       = useState(null)   // group draw state
+  const [groups, setGroups]         = useState(null)
   const { history, upsertHistory, deleteEntry, deleteAll, restoreEntry } = useHistory()
 
   // ── Bracket mode ──
@@ -54,7 +54,8 @@ export default function App() {
     setView('bracket')
   }
 
-  const handleHome = () => { setTournament(null); setGroups(null); setView('home') }
+  // Back to setup WITHOUT losing setup state (no clearAll called)
+  const handleHome  = () => { setTournament(null); setGroups(null); setView('home') }
 
   return (
     <div className="app-shell">
@@ -85,7 +86,23 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
         {view === 'groups' && groups && (
-          <GroupView groups={groups} onGroupsUpdate={handleGroupsUpdate} />
+          <div>
+            {/* Back to setup button — keeps all form data */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 0 0' }}>
+              <button
+                onClick={handleHome}
+                style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: 'var(--neon-blue)',
+                  background: 'rgba(0,212,255,0.08)',
+                  border: '1px solid rgba(0,212,255,0.25)',
+                  borderRadius: 10, padding: '7px 16px',
+                  cursor: 'pointer',
+                }}
+              >← Back to Setup</button>
+            </div>
+            <GroupView groups={groups} onGroupsUpdate={handleGroupsUpdate} />
+          </div>
         )}
       </main>
 

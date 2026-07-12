@@ -1,62 +1,85 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import { TAG_META } from '../engine/groupEngine.js'
+import { useSetupStorage } from '../hooks/useSetupStorage.js'
 
 const PRESETS = [4, 8, 16, 32]
-const TAGS = ['A', 'B', 'C']
+const TAGS    = ['A', 'B', 'C']
 
 const MODE_BRACKET = 'bracket'
 const MODE_GROUP   = 'group'
 
+const DEFAULT_COUNT = 8
+
+const makePlayer  = (i)      => ({ id: `p${i+1}`, name: '', tag: 'B' })
+const makePlayers = (n, old) =>
+  Array.from({ length: n }, (_, i) => old?.[i] ?? makePlayer(i))
+
+const defaults = {
+  mode:         MODE_BRACKET,
+  // bracket
+  format:       'single_elim',
+  count:        DEFAULT_COUNT,
+  custom:       '',
+  names:        makePlayers(DEFAULT_COUNT),
+  // group
+  groupCount:   DEFAULT_COUNT,
+  groupCustom:  '',
+  groupSize:    4,
+  groupPlayers: makePlayers(DEFAULT_COUNT),
+}
+
 export default function Setup({ onStart, onGroupStart }) {
-  const [mode, setMode]      = useState(MODE_BRACKET)
-
-  // Bracket state
-  const [format, setFormat]  = useState('single_elim')
-  const [count, setCountVal] = useState(8)
-  const [custom, setCustom]  = useState('')
-  const [names, setNames]    = useState(
-    Array.from({ length: 8 }, (_, i) => ({ id: `p${i+1}`, name: `Player ${i+1}` }))
-  )
-
-  // Group state
-  const [groupCount, setGroupCount] = useState(8)
-  const [groupCustom, setGroupCustom] = useState('')
-  const [groupSize, setGroupSize]   = useState(4)
-  const [groupPlayers, setGroupPlayers] = useState(
-    Array.from({ length: 8 }, (_, i) => ({ id: `p${i+1}`, name: `Player ${i+1}`, tag: 'B' }))
-  )
+  const [s, set, clearAll] = useSetupStorage(defaults)
 
   // ── Bracket helpers ──
   const applyCount = (n) => {
-    setCountVal(n); setCustom('')
-    setNames(Array.from({ length: n }, (_, i) => ({ id: `p${i+1}`, name: `Player ${i+1}` })))
+    set('count', n)
+    set('custom', String(n))
+    set('names', makePlayers(n, s.names))
   }
-  const onCustom = (val) => {
-    setCustom(val)
+  const onCustomBracket = (val) => {
+    set('custom', val)
     const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) applyCount(n)
+    if (!isNaN(n) && n >= 2 && n <= 64) {
+      set('count', n)
+      set('names', makePlayers(n, s.names))
+    }
   }
   const updateName = (i, v) =>
-    setNames(p => p.map((x, idx) => idx === i ? { ...x, name: v || `Player ${i+1}` } : x))
+    set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
+
+  const clearNames = () =>
+    set('names', s.names.map(p => ({ ...p, name: '' })))
 
   // ── Group helpers ──
   const applyGroupCount = (n) => {
-    setGroupCount(n); setGroupCustom('')
-    setGroupPlayers(Array.from({ length: n }, (_, i) => ({ id: `p${i+1}`, name: `Player ${i+1}`, tag: 'B' })))
+    set('groupCount', n)
+    set('groupCustom', String(n))
+    set('groupPlayers', makePlayers(n, s.groupPlayers))
   }
   const onGroupCustom = (val) => {
-    setGroupCustom(val)
+    set('groupCustom', val)
     const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) applyGroupCount(n)
+    if (!isNaN(n) && n >= 2 && n <= 64) {
+      set('groupCount', n)
+      set('groupPlayers', makePlayers(n, s.groupPlayers))
+    }
   }
   const updateGroupName = (i, v) =>
-    setGroupPlayers(p => p.map((x, idx) => idx === i ? { ...x, name: v || `Player ${i+1}` } : x))
-  const updateGroupTag = (i, tag) =>
-    setGroupPlayers(p => p.map((x, idx) => idx === i ? { ...x, tag } : x))
+    set('groupPlayers', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
+  const updateGroupTag  = (i, tag) =>
+    set('groupPlayers', prev => prev.map((x, idx) => idx === i ? { ...x, tag } : x))
 
-  const fmt = FORMATS.find(f => f.id === format)
+  const clearGroupNames = () =>
+    set('groupPlayers', s.groupPlayers.map(p => ({ ...p, name: '' })))
+
+  const fmt = FORMATS.find(f => f.id === s.format)
+
+  // Resolve display names (fall back to 'Player N' placeholder on submit only)
+  const resolvedNames       = s.names.map((p, i)       => ({ ...p, name: p.name || `Player ${i+1}` }))
+  const resolvedGroupPlayers = s.groupPlayers.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
 
   return (
     <>
@@ -76,17 +99,17 @@ export default function Setup({ onStart, onGroupStart }) {
         <motion.div className="glass mode-toggle-bar"
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <button
-            className={`mode-btn${mode === MODE_BRACKET ? ' active' : ''}`}
-            onClick={() => setMode(MODE_BRACKET)}
+            className={`mode-btn${s.mode === MODE_BRACKET ? ' active' : ''}`}
+            onClick={() => set('mode', MODE_BRACKET)}
           >🏆 Bracket Draw</button>
           <button
-            className={`mode-btn${mode === MODE_GROUP ? ' active' : ''}`}
-            onClick={() => setMode(MODE_GROUP)}
+            className={`mode-btn${s.mode === MODE_GROUP ? ' active' : ''}`}
+            onClick={() => set('mode', MODE_GROUP)}
           >🎯 Group Draw</button>
         </motion.div>
 
         {/* ═══ BRACKET MODE ═══ */}
-        {mode === MODE_BRACKET && (
+        {s.mode === MODE_BRACKET && (
           <>
             <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -96,8 +119,8 @@ export default function Setup({ onStart, onGroupStart }) {
               </div>
               <div className="formats-grid">
                 {FORMATS.map(f => (
-                  <div key={f.id} className={`format-tile${format === f.id ? ' sel' : ''}`}
-                    onClick={() => setFormat(f.id)}>
+                  <div key={f.id} className={`format-tile${s.format === f.id ? ' sel' : ''}`}
+                    onClick={() => set('format', f.id)}>
                     <span className={`tag ${f.color}`}>{f.tag}</span>
                     <div className="format-tile-name">{f.label}</div>
                     <div className="format-tile-desc">{f.desc}</div>
@@ -114,43 +137,57 @@ export default function Setup({ onStart, onGroupStart }) {
               </div>
               <div className="count-presets">
                 {PRESETS.map(n => (
-                  <button key={n} className={`count-btn${count === n && !custom ? ' sel' : ''}`}
+                  <button key={n} className={`count-btn${s.count === n ? ' sel' : ''}`}
                     onClick={() => applyCount(n)}>{n}</button>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input type="number" min="2" max="64" placeholder="Custom (2–64)"
-                  value={custom} onChange={e => onCustom(e.target.value)} style={{ maxWidth: 160 }} />
-                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>{names.length} players</span>
+                <input
+                  type="number" min="2" max="64" placeholder="Custom (2–64)"
+                  value={s.custom}
+                  onChange={e => onCustomBracket(e.target.value)}
+                  style={{ maxWidth: 160 }}
+                />
+                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                  {s.names.length} players
+                </span>
               </div>
             </motion.div>
 
-            {names.length > 0 && (
+            {s.names.length > 0 && (
               <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
                 <div className="step-label">
                   <div className="step-num">3</div>
-                  <div className="step-title">Player Names <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>(optional)</span></div>
+                  <div className="step-title">
+                    Player Names
+                    <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12, marginLeft: 6 }}>(optional)</span>
+                  </div>
+                  <button className="clear-names-btn" onClick={clearNames} title="Clear all names">✕ Clear All</button>
                 </div>
                 <div className="names-grid">
-                  {names.map((p, i) => (
+                  {s.names.map((p, i) => (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
-                      <input value={p.name} onChange={e => updateName(i, e.target.value)} placeholder={`Player ${i+1}`} />
+                      <input
+                        value={p.name}
+                        onChange={e => updateName(i, e.target.value)}
+                        placeholder={`Player ${i+1}`}
+                      />
                     </div>
                   ))}
                 </div>
               </motion.div>
             )}
 
-            {names.length >= 2 && (
+            {s.names.length >= 2 && (
               <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.34 }}>
-                <button className="gen-btn" onClick={() => onStart({ format, players: names })}>
+                <button className="gen-btn" onClick={() => onStart({ format: s.format, players: resolvedNames })}>
                   Generate Bracket →
                 </button>
                 <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                  {fmt?.label} · {names.length} players
+                  {fmt?.label} · {s.names.length} players
                 </div>
               </motion.div>
             )}
@@ -158,9 +195,8 @@ export default function Setup({ onStart, onGroupStart }) {
         )}
 
         {/* ═══ GROUP MODE ═══ */}
-        {mode === MODE_GROUP && (
+        {s.mode === MODE_GROUP && (
           <>
-            {/* Step 1: Players */}
             <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <div className="step-label">
@@ -169,18 +205,23 @@ export default function Setup({ onStart, onGroupStart }) {
               </div>
               <div className="count-presets">
                 {PRESETS.map(n => (
-                  <button key={n} className={`count-btn${groupCount === n && !groupCustom ? ' sel' : ''}`}
+                  <button key={n} className={`count-btn${s.groupCount === n ? ' sel' : ''}`}
                     onClick={() => applyGroupCount(n)}>{n}</button>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input type="number" min="2" max="64" placeholder="Custom (2–64)"
-                  value={groupCustom} onChange={e => onGroupCustom(e.target.value)} style={{ maxWidth: 160 }} />
-                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>{groupPlayers.length} players</span>
+                <input
+                  type="number" min="2" max="64" placeholder="Custom (2–64)"
+                  value={s.groupCustom}
+                  onChange={e => onGroupCustom(e.target.value)}
+                  style={{ maxWidth: 160 }}
+                />
+                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                  {s.groupPlayers.length} players
+                </span>
               </div>
             </motion.div>
 
-            {/* Step 2: Group size */}
             <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
               <div className="step-label">
@@ -189,8 +230,8 @@ export default function Setup({ onStart, onGroupStart }) {
               </div>
               <div className="count-presets">
                 {[2, 3, 4, 5, 6].map(n => (
-                  <button key={n} className={`count-btn${groupSize === n ? ' sel' : ''}`}
-                    onClick={() => setGroupSize(n)}>{n}</button>
+                  <button key={n} className={`count-btn${s.groupSize === n ? ' sel' : ''}`}
+                    onClick={() => set('groupSize', n)}>{n}</button>
                 ))}
               </div>
               <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
@@ -198,13 +239,13 @@ export default function Setup({ onStart, onGroupStart }) {
               </div>
             </motion.div>
 
-            {/* Step 3: Players + tags */}
-            {groupPlayers.length > 0 && (
+            {s.groupPlayers.length > 0 && (
               <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
                 <div className="step-label">
                   <div className="step-num">3</div>
-                  <div className="step-title">Players & Skill Tags</div>
+                  <div className="step-title">Players &amp; Skill Tags</div>
+                  <button className="clear-names-btn" onClick={clearGroupNames} title="Clear all names">✕ Clear All</button>
                 </div>
                 <div className="tag-legend">
                   {TAGS.map(t => (
@@ -215,7 +256,7 @@ export default function Setup({ onStart, onGroupStart }) {
                   ))}
                 </div>
                 <div className="names-grid">
-                  {groupPlayers.map((p, i) => (
+                  {s.groupPlayers.map((p, i) => (
                     <div key={p.id} className="gp-row">
                       <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
                       <input
@@ -240,20 +281,33 @@ export default function Setup({ onStart, onGroupStart }) {
               </motion.div>
             )}
 
-            {groupPlayers.length >= 2 && (
+            {s.groupPlayers.length >= 2 && (
               <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                 <button className="gen-btn"
-                  onClick={() => onGroupStart({ players: groupPlayers, groupSize })}>
+                  onClick={() => onGroupStart({ players: resolvedGroupPlayers, groupSize: s.groupSize })}>
                   Generate Groups →
                 </button>
                 <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                  {groupPlayers.length} players · {groupSize} per group · tag-matched
+                  {s.groupPlayers.length} players · {s.groupSize} per group · tag-matched
                 </div>
               </motion.div>
             )}
           </>
         )}
+
+        {/* Reset everything */}
+        <motion.div style={{ textAlign: 'center', paddingBottom: 16 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+          <button
+            onClick={clearAll}
+            style={{
+              fontSize: 12, color: 'var(--muted)', background: 'none',
+              border: '1px solid var(--border2)', borderRadius: 8,
+              padding: '6px 14px', cursor: 'pointer'
+            }}
+          >🗑 Reset all setup data</button>
+        </motion.div>
       </div>
     </>
   )
