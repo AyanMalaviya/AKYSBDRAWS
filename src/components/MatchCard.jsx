@@ -3,37 +3,31 @@ import React from 'react'
 export default function MatchCard({ match, onWin, onDraw, showDraw = false }) {
   if (!match) return null
   const done = !!match.winner
-  const p1Name = match.p1?.name || 'TBD'
-  const p2Name = match.p2?.name || 'TBD'
+  const p1 = match.p1, p2 = match.p2
 
-  const rowStyle = (player) => ({
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '7px 10px', borderRadius: 6,
-    cursor: (!done && match.p1 && match.p2) ? 'pointer' : 'default',
-    background: done && match.winner?.id === player?.id ? 'rgba(34,197,94,0.15)'
-              : done && match.winner !== 'draw' ? 'rgba(239,68,68,0.08)' : 'var(--surface2)',
-    border: `1px solid ${done && match.winner?.id === player?.id ? 'var(--win)' : 'transparent'}`,
-    opacity: done && match.winner !== 'draw' && match.winner?.id !== player?.id ? 0.5 : 1,
-    transition: 'all 0.12s'
-  })
+  const rowCls = (player) => {
+    if (!done) return player ? 'match-row' : 'match-row tbd'
+    if (match.winner === 'draw') return 'match-row'
+    return match.winner?.id === player?.id ? 'match-row winner' : 'match-row loser'
+  }
 
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, minWidth: 180, maxWidth: 220 }}>
-      <div style={rowStyle(match.p1)} onClick={() => !done && match.p1 && match.p2 && onWin?.(match.p1, match.p2)}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{p1Name}</span>
-        {done && match.winner?.id === match.p1?.id && <span style={{ color: 'var(--win)', fontSize: 12 }}>✓</span>}
+    <div className="match-card">
+      <div className={rowCls(p1)}
+        onClick={() => !done && p1 && p2 && onWin?.(p1, p2)}>
+        <span>{p1?.name || 'TBD'}</span>
+        {done && match.winner?.id === p1?.id && <span style={{ color: 'var(--neon-green)', fontSize: 10 }}>✓</span>}
       </div>
-      <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--muted)', padding: '3px 0' }}>VS</div>
-      <div style={rowStyle(match.p2)} onClick={() => !done && match.p1 && match.p2 && onWin?.(match.p2, match.p1)}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{p2Name}</span>
-        {done && match.winner?.id === match.p2?.id && <span style={{ color: 'var(--win)', fontSize: 12 }}>✓</span>}
+      <div className="match-vs">VS</div>
+      <div className={rowCls(p2)}
+        onClick={() => !done && p1 && p2 && onWin?.(p2, p1)}>
+        <span>{p2?.name || 'TBD'}</span>
+        {done && match.winner?.id === p2?.id && <span style={{ color: 'var(--neon-green)', fontSize: 10 }}>✓</span>}
       </div>
-      {showDraw && !done && match.p1 && match.p2 && (
-        <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 6, fontSize: 11 }} onClick={() => onDraw?.()}>Draw</button>
+      {showDraw && !done && p1 && p2 && (
+        <button className="match-draw-btn" onClick={() => onDraw?.()}>Draw</button>
       )}
-      {done && (
-        <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 6, fontSize: 10, opacity: 0.5 }} onClick={() => onWin?.(null)}>Undo</button>
-      )}
+      {done && <button className="match-undo" onClick={() => onWin?.(null)}>undo</button>}
     </div>
   )
 }

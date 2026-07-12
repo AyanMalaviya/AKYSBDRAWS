@@ -1,45 +1,49 @@
-// useHistory — persists tournament history to localStorage
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'akysbdraws_history'
+const KEY = 'akysbdraws_history'
 
 export function useHistory() {
   const [history, setHistory] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch { return [] }
+    try { return JSON.parse(localStorage.getItem(KEY) || '[]') }
+    catch { return [] }
   })
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)) }
-    catch { /* storage full */ }
+    try { localStorage.setItem(KEY, JSON.stringify(history)) }
+    catch {}
   }, [history])
 
-  const saveToHistory = (tournament) => {
-    const entry = {
-      id: Date.now().toString(),
-      savedAt: new Date().toISOString(),
-      format: tournament.format,
-      playerCount: tournament.players.length,
-      players: tournament.players,
-      bracket: tournament.bracket,
-      champion: tournament.bracket.champion || null,
-    }
-    setHistory(prev => [entry, ...prev].slice(0, 50)) // max 50 entries
+  // UPSERT by tournamentId — never creates duplicates
+  const upsertHistory = (tournament) => {
+    if (!tournament?.id) return
+    setHistory(prev => {
+      const existing = prev.findIndex(e => e.id === tournament.id)
+      const entry = {
+        id: tournament.id,
+        savedAt: new Date().toISOString(),
+        format: tournament.format,
+        playerCount: tournament.players.length,
+        players: tournament.players,
+        bracket: tournament.bracket,
+        champion: tournament.bracket?.champion || null,
+      }
+      if (existing >= 0) {
+        const next = [...prev]
+        next[existing] = entry
+        return next
+      }
+      return [entry, ...prev].slice(0, 50)
+    })
   }
 
-  const deleteEntry = (id) => {
-    setHistory(prev => prev.filter(e => e.id !== id))
-  }
-
+  const deleteEntry = (id) => setHistory(prev => prev.filter(e => e.id !== id))
   const deleteAll = () => setHistory([])
-
   const restoreEntry = (entry) => ({
+    id: entry.id,
     format: entry.format,
     players: entry.players,
     bracket: entry.bracket,
   })
 
-  return { history, saveToHistory, deleteEntry, deleteAll, restoreEntry }
+  return { history, upsertHistory, deleteEntry, deleteAll, restoreEntry }
 }

@@ -1,109 +1,103 @@
 import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 
-const fmt = (isoStr) => {
-  const d = new Date(isoStr)
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-    + ' · ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+const fmtDate = (iso) => {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+    + ' · ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })
 }
 
-function ConfirmModal({ message, onConfirm, onCancel }) {
+function ConfirmModal({ msg, onConfirm, onCancel }) {
   return (
-    <div className="modal-backdrop">
-      <div className="modal-box">
-        <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
-        <p style={{ textAlign: 'center', fontSize: 15, marginBottom: 20, color: 'var(--text)' }}>{message}</p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+    <div className="modal-overlay">
+      <motion.div className="modal-box"
+        initial={{ scale: 0.88, opacity: 0, y: 12 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.88, opacity: 0, y: 8 }}
+        transition={{ duration: 0.2 }}>
+        <div className="modal-icon">⚠️</div>
+        <div className="modal-msg">{msg}</div>
+        <div className="modal-btns">
           <button className="btn btn-ghost" onClick={onCancel} style={{ minWidth: 90 }}>Cancel</button>
           <button className="btn btn-danger" onClick={onConfirm} style={{ minWidth: 90 }}>Delete</button>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
 
 export default function Dashboard({ history, onRestore, onDelete, onDeleteAll }) {
-  const [confirmSingle, setConfirmSingle] = useState(null) // id to delete
-  const [confirmAll, setConfirmAll] = useState(false)
+  const [confirmId, setConfirmId]   = useState(null)
+  const [confirmAllFlag, setAll]    = useState(false)
 
-  if (history.length === 0) {
-    return (
-      <div className="empty-state">
-        <div style={{ fontSize: 48, marginBottom: 12 }}>📂</div>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>No history yet</h2>
-        <p style={{ color: 'var(--muted)', fontSize: 14 }}>Tournaments you play will be auto-saved here.</p>
-      </div>
-    )
-  }
-
-  const fmtDef = (id) => FORMATS.find(f => f.id === id)
+  if (history.length === 0) return (
+    <div className="empty-state">
+      <div style={{ fontSize: 52, filter: 'grayscale(0.3)' }}>📂</div>
+      <div style={{ fontSize: 18, fontWeight: 800 }}>No history yet</div>
+      <div style={{ fontSize: 14, color: 'var(--muted)' }}>Play a tournament — it’ll appear here automatically.</div>
+    </div>
+  )
 
   return (
-    <div className="dashboard">
-      {/* Header row */}
+    <div>
       <div className="dash-header">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800 }}>Tournament History</h2>
-          <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>{history.length} saved tournament{history.length !== 1 ? 's' : ''}</p>
+          <div className="dash-title">Tournament History</div>
+          <div className="dash-sub">{history.length} saved tournament{history.length!==1?'s':''}</div>
         </div>
-        <button className="btn btn-danger btn-sm" onClick={() => setConfirmAll(true)}>
-          🗑 Clear All
-        </button>
+        <button className="btn btn-danger btn-sm" onClick={() => setAll(true)}>🗑 Clear All</button>
       </div>
 
-      {/* History grid */}
       <div className="history-grid">
-        {history.map(entry => {
-          const f = fmtDef(entry.format)
-          return (
-            <div key={entry.id} className="history-card">
-              <div className="hcard-top">
-                <span className={`tag ${f?.color}`}>{f?.tag}</span>
-                <span className="hcard-format">{f?.label}</span>
-                {entry.champion && (
-                  <span className="hcard-champion">🏆 {entry.champion.name}</span>
-                )}
-              </div>
-              <div className="hcard-meta">
-                <span>👥 {entry.playerCount} players</span>
-                <span>🕒 {fmt(entry.savedAt)}</span>
-              </div>
-              <div className="hcard-players">
-                {entry.players.slice(0, 6).map(p => (
-                  <span key={p.id} className="player-chip">{p.name}</span>
-                ))}
-                {entry.players.length > 6 && (
-                  <span className="player-chip player-chip-more">+{entry.players.length - 6} more</span>
-                )}
-              </div>
-              <div className="hcard-actions">
-                <button className="btn btn-ghost btn-sm" onClick={() => onRestore(entry)}>
-                  ↩ Restore
-                </button>
-                <button className="btn btn-danger btn-sm" onClick={() => setConfirmSingle(entry.id)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          )
-        })}
+        <AnimatePresence>
+          {history.map((entry, i) => {
+            const f = FORMATS.find(x => x.id === entry.format)
+            return (
+              <motion.div key={entry.id} className="hcard"
+                initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
+                <div className="hcard-top">
+                  <span className={`tag ${f?.color}`}>{f?.tag}</span>
+                  <span className="hcard-fmt">{f?.label}</span>
+                  {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
+                </div>
+                <div className="hcard-meta">
+                  <span>👥 {entry.playerCount} players</span>
+                  <span>🕒 {fmtDate(entry.savedAt)}</span>
+                </div>
+                <div className="hcard-players">
+                  {entry.players.slice(0, 6).map(p => (
+                    <span key={p.id} className="p-chip">{p.name}</span>
+                  ))}
+                  {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
+                </div>
+                <div className="hcard-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => onRestore(entry)}>↩ Restore</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => setConfirmId(entry.id)}>Delete</button>
+                </div>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
       </div>
 
-      {/* Confirm modals */}
-      {confirmSingle && (
-        <ConfirmModal
-          message="Delete this tournament from history? This cannot be undone."
-          onConfirm={() => { onDelete(confirmSingle); setConfirmSingle(null) }}
-          onCancel={() => setConfirmSingle(null)}
-        />
-      )}
-      {confirmAll && (
-        <ConfirmModal
-          message={`Delete all ${history.length} tournaments from history? This cannot be undone.`}
-          onConfirm={() => { onDeleteAll(); setConfirmAll(false) }}
-          onCancel={() => setConfirmAll(false)}
-        />
-      )}
+      <AnimatePresence>
+        {confirmId && (
+          <ConfirmModal
+            msg="Delete this tournament from history? This cannot be undone."
+            onConfirm={() => { onDelete(confirmId); setConfirmId(null) }}
+            onCancel={() => setConfirmId(null)}
+          />
+        )}
+        {confirmAllFlag && (
+          <ConfirmModal
+            msg={`Delete all ${history.length} tournaments? This cannot be undone.`}
+            onConfirm={() => { onDeleteAll(); setAll(false) }}
+            onCancel={() => setAll(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
