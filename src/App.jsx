@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react'
 import Setup from './components/Setup.jsx'
 import BracketView from './components/BracketView.jsx'
 import Dashboard from './components/Dashboard.jsx'
+import Footer from './components/Footer.jsx'
 import { generateBracket } from './engine/bracketEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
@@ -12,20 +13,20 @@ export default function App() {
 
   const handleStart = ({ format, players }) => {
     const t = {
-      id: Date.now().toString(), // stable ID for this tournament session
+      id: Date.now().toString(),
       format,
       players,
       bracket: generateBracket(format, players),
     }
     setTournament(t)
-    upsertHistory(t) // save once on creation
+    upsertHistory(t)
     setView('bracket')
   }
 
   const handleBracketUpdate = useCallback((updatedBracket) => {
     setTournament(prev => {
       const updated = { ...prev, bracket: updatedBracket }
-      upsertHistory(updated) // upserts same entry, never duplicates
+      upsertHistory(updated)
       return updated
     })
   }, [upsertHistory])
@@ -66,6 +67,8 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
       </main>
+
+      <Footer />
     </div>
   )
 }
