@@ -1,9 +1,18 @@
 // ── Group Draw Engine ──
 // Players are tagged A (strong), B (average), C (weak).
-// Groups are formed so all players in a group share the same tag.
-// Group size is configurable. Players within each tag are shuffled randomly
-// then sliced into groups of the chosen size.
-// Each group plays a full round-robin among themselves.
+//
+// GROUPING RULES:
+//   1. Shuffle players within each tag randomly.
+//   2. Slice into groups of `groupSize` for each tag.
+//   3. Remainders (< groupSize players left over in a tag) are redistributed:
+//        A remainders  → appended to the LAST B group (or form a new mixed group)
+//        B remainders  → appended to the LAST C group (or form a new mixed group)
+//        C remainders  → appended to the LAST C group (wrap the last group)
+//      If the target tag has NO groups at all, the remainders form their own group.
+//
+// WITHIN EACH GROUP:
+//   Full round-robin. Win = 3 pts, Draw = 1 pt each, Loss = 0 pts.
+//   Group winner = player with most points (tie-break: most wins).
 
 const uid = () => Math.random().toString(36).slice(2, 8)
 
@@ -38,50 +47,125 @@ function makeRoundRobin(players, groupId) {
   return matches
 }
 
-// standings for a group
 function makeStandings(players) {
   return players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
 }
 
 /**
+ * Compute the winner(s) of a group from its standings.
+ * Returns the player object with the most points (ties broken by wins).
+ * Returns null if no match has been played yet.
+ */
+export function getGroupWinner(group) {
+  const played = group.standings.filter(s => s.played > 0)
+  if (played.length === 0) return null
+  const allDone = group.matches.every(m => m.winner !== null)
+  if (!allDone) return null
+  const sorted = [...group.standings].sort((a, b) => b.points - a.points || b.wins - a.wins)
+  return sorted[0]
+}
+
+/**
  * generateGroups(players, groupSize)
- *  players:   [{ id, name, tag }]  — tag must be 'A' | 'B' | 'C'
- *  groupSize: number  — max players per group
+ *  players   : [{ id, name, tag }]  — tag must be 'A' | 'B' | 'C'
+ *  groupSize : number  — target players per group (≥ 2)
  *
- * Returns:
- *  [
- *    { id, tag, name, players, matches, standings },
- *    ...
- *  ]
+ * Redistribution of remainders:
+ *   A leftover → merged into last B group (or own group if no B groups)
+ *   B leftover → merged into last C group (or own group if no C groups)
+ *   C leftover → merged into last C group
+ *
+ * Returns: [{ id, tag, name, mixed, players, matches, standings }]
  */
 export function generateGroups(players, groupSize) {
+  // 1. Bucket & shuffle by tag
   const byTag = { A: [], B: [], C: [] }
   players.forEach(p => {
     const t = (p.tag || 'B').toUpperCase()
-    byTag[t] = byTag[t] || []
+    if (!byTag[t]) byTag[t] = []
     byTag[t].push(p)
   })
 
+  // 2. Build initial groups per tag, collect remainders
+  const groupsByTag = { A: [], B: [], C: [] }
+  const remainders  = { A: [], B: [], C: [] }
+
+  ;['A', 'B', 'C'].forEach(tag => {
+    const shuffled = shuffle(byTag[tag] || [])
+    const fullGroups = Math.floor(shuffled.length / groupSize)
+    for (let i = 0; i < fullGroups; i++) {
+      groupsByTag[tag].push(shuffled.slice(i * groupSize, (i + 1) * groupSize))
+    }
+    const rem = shuffled.length % groupSize
+    if (rem > 0) remainders[tag] = shuffled.slice(fullGroups * groupSize)
+  })
+
+  // 3. Redistribute remainders
+  //    A → last B group (append) or new mixed group
+  if (remainders.A.length > 0) {
+    if (groupsByTag.B.length > 0) {
+      groupsByTag.B[groupsByTag.B.length - 1] =
+        [...groupsByTag.B[groupsByTag.B.length - 1], ...remainders.A]
+    } else if (groupsByTag.A.length > 0) {
+      // No B groups exist – append to last A group
+      groupsByTag.A[groupsByTag.A.length - 1] =
+        [...groupsByTag.A[groupsByTag.A.length - 1], ...remainders.A]
+    } else {
+      // A-only draw with no full groups – one single group
+      groupsByTag.A.push(remainders.A)
+    }
+  }
+
+  //    B → last C group (append) or new mixed group
+  if (remainders.B.length > 0) {
+    if (groupsByTag.C.length > 0) {
+      groupsByTag.C[groupsByTag.C.length - 1] =
+        [...groupsByTag.C[groupsByTag.C.length - 1], ...remainders.B]
+    } else if (groupsByTag.B.length > 0) {
+      groupsByTag.B[groupsByTag.B.length - 1] =
+        [...groupsByTag.B[groupsByTag.B.length - 1], ...remainders.B]
+    } else {
+      groupsByTag.B.push(remainders.B)
+    }
+  }
+
+  //    C → last C group (or standalone)
+  if (remainders.C.length > 0) {
+    if (groupsByTag.C.length > 0) {
+      groupsByTag.C[groupsByTag.C.length - 1] =
+        [...groupsByTag.C[groupsByTag.C.length - 1], ...remainders.C]
+    } else {
+      groupsByTag.C.push(remainders.C)
+    }
+  }
+
+  // 4. Flatten into final group objects
   const groups = []
   let groupNum = 1
 
   ;['A', 'B', 'C'].forEach(tag => {
-    const tagPlayers = shuffle(byTag[tag] || [])
-    if (tagPlayers.length === 0) return
-
-    for (let i = 0; i < tagPlayers.length; i += groupSize) {
-      const slice = tagPlayers.slice(i, i + groupSize)
+    groupsByTag[tag].forEach((playerSlice, idx) => {
+      if (playerSlice.length === 0) return
       const id = `G${groupNum}`
+      // Check if this group is mixed (contains players from other tags)
+      const tags = [...new Set(playerSlice.map(p => (p.tag || 'B').toUpperCase()))]
+      const mixed = tags.length > 1
+      const displayTag = tag
+      const nameLabel = mixed
+        ? `Group ${id} (${TAG_META[tag].label} +mixed)`
+        : `Group ${id} (${TAG_META[tag].label})`
+
       groups.push({
         id,
-        tag,
-        name: `Group ${id} (${TAG_META[tag].label})`,
-        players: slice,
-        matches: makeRoundRobin(slice, id),
-        standings: makeStandings(slice),
+        tag: displayTag,
+        name: nameLabel,
+        mixed,
+        players: playerSlice,
+        matches: makeRoundRobin(playerSlice, id),
+        standings: makeStandings(playerSlice),
       })
       groupNum++
-    }
+    })
   })
 
   return groups

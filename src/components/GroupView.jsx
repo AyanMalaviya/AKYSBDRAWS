@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { TAG_META } from '../engine/groupEngine.js'
-import { recordGroupResult } from '../engine/groupEngine.js'
+import { TAG_META, recordGroupResult, getGroupWinner } from '../engine/groupEngine.js'
 
 function MatchRow({ match, onResult }) {
   const isDone = !!match.winner
@@ -31,7 +30,7 @@ function MatchRow({ match, onResult }) {
   )
 }
 
-function StandingsTable({ standings }) {
+function StandingsTable({ standings, winnerId }) {
   return (
     <table className="gs-table">
       <thead>
@@ -41,9 +40,18 @@ function StandingsTable({ standings }) {
       </thead>
       <tbody>
         {standings.map((s, i) => (
-          <tr key={s.id} className={i === 0 ? 'gs-top' : ''}>
+          <tr
+            key={s.id}
+            className={[
+              i === 0 ? 'gs-top' : '',
+              s.id === winnerId ? 'gs-winner' : '',
+            ].filter(Boolean).join(' ')}
+          >
             <td>{i + 1}</td>
-            <td>{s.name}</td>
+            <td>
+              {s.id === winnerId && <span className="gs-crown" title="Group Winner">👑 </span>}
+              {s.name}
+            </td>
             <td>{s.played}</td>
             <td>{s.wins}</td>
             <td>{s.draws}</td>
@@ -62,14 +70,16 @@ function GroupCard({ group, onUpdate }) {
   const done = group.matches.filter(m => m.winner).length
   const total = group.matches.length
   const pct = total ? Math.round((done / total) * 100) : 0
+  const allDone = done === total && total > 0
+  const winner = getGroupWinner(group)
 
-  const handleResult = (matchId, winner) => {
-    onUpdate(group.id, matchId, winner)
+  const handleResult = (matchId, w) => {
+    onUpdate(group.id, matchId, w)
   }
 
   return (
     <motion.div
-      className="group-card"
+      className={`group-card${allDone ? ' group-card--done' : ''}`}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       style={{ '--tag-color': meta.color, '--tag-glow': meta.glow }}
@@ -79,6 +89,9 @@ function GroupCard({ group, onUpdate }) {
         <div className="gc-title-row">
           <span className="gc-tag" style={{ background: meta.color }}>{group.tag}</span>
           <span className="gc-name">{group.name}</span>
+          {group.mixed && (
+            <span className="gc-mixed-badge" title="Contains players from multiple tiers">mixed</span>
+          )}
           <span className="gc-count">{group.players.length} players</span>
         </div>
         <div className="gc-progress-bar">
@@ -86,6 +99,23 @@ function GroupCard({ group, onUpdate }) {
         </div>
         <div className="gc-progress-label">{done}/{total} matches done</div>
       </div>
+
+      {/* Winner banner */}
+      {allDone && winner && (
+        <motion.div
+          className="gc-winner-banner"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          style={{ borderColor: meta.color, boxShadow: `0 0 12px ${meta.glow}` }}
+        >
+          <span className="gc-winner-icon">👑</span>
+          <div>
+            <div className="gc-winner-label">Group Winner</div>
+            <div className="gc-winner-name" style={{ color: meta.color }}>{winner.name}</div>
+            <div className="gc-winner-stats">{winner.wins}W · {winner.draws}D · {winner.losses}L · {winner.points}pts</div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Matches */}
       <div className="gc-matches">
@@ -105,7 +135,7 @@ function GroupCard({ group, onUpdate }) {
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
             style={{ overflow: 'hidden' }}
           >
-            <StandingsTable standings={group.standings} />
+            <StandingsTable standings={group.standings} winnerId={allDone && winner ? winner.id : null} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -118,13 +148,38 @@ export default function GroupView({ groups, onGroupsUpdate }) {
     onGroupsUpdate(recordGroupResult(groups, groupId, matchId, winner))
   }
 
-  // Separate by tag order
+  // Check overall completion
+  const allGroupsDone = groups.every(g => g.matches.every(m => m.winner !== null) && g.matches.length > 0)
+  const groupWinners = groups.map(g => getGroupWinner(g)).filter(Boolean)
+
   const tagOrder = ['A', 'B', 'C']
   const byTag = tagOrder.map(tag => groups.filter(g => g.tag === tag)).filter(arr => arr.length > 0)
 
   return (
     <div className="group-view">
-      {byTag.map((tagGroups, ti) => {
+      {/* All-done summary */}
+      <AnimatePresence>
+        {allGroupsDone && groupWinners.length > 0 && (
+          <motion.div
+            className="gv-summary"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="gv-summary-title">🏆 Group Stage Complete — Advancing Players</div>
+            <div className="gv-summary-list">
+              {groupWinners.map((w, i) => (
+                <div key={w.id} className="gv-summary-item">
+                  <span className="gv-summary-pos">{i + 1}</span>
+                  <span className="gv-summary-name">{w.name}</span>
+                  <span className="gv-summary-pts">{w.points} pts</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {byTag.map((tagGroups) => {
         const tag = tagGroups[0].tag
         const meta = TAG_META[tag]
         return (
