@@ -2,8 +2,6 @@
    Covers: Setup mode toggle, player tag selector, GroupView layout,
    group cards, match rows, standings table, winner banner, summary panel.
    All color values use tokens from index.css (:root).
-   --tag-color / --tag-glow are set as inline styles on .group-card
-   and inherited by all children inside it.
 */
 
 /* ───────────────────────────────────
@@ -62,6 +60,7 @@
   font-size: 11px;
   font-weight: 900;
   color: #000;
+  flex-shrink: 0;
 }
 .tl-label {
   font-size: 12px;
@@ -99,7 +98,6 @@
   border-color: rgba(255,255,255,0.25);
   color: var(--text);
 }
-/* Active state is handled via inline style in Setup.jsx (background + color + boxShadow) */
 
 /* ───────────────────────────────────
    GROUP VIEW: Outer layout
@@ -165,24 +163,35 @@
   text-transform: uppercase;
   padding: 4px 0;
 }
+/* Tier badge — auto-width pill, NOT a fixed square */
 .ts-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  height: 24px;
+  padding: 0 8px;
   border-radius: 6px;
   color: #000;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
-.ts-label { flex: 1; }
+.ts-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .ts-count {
   font-size: 11px;
   font-weight: 400;
   color: var(--muted);
   text-transform: none;
   letter-spacing: 0;
+  flex-shrink: 0;
 }
 
 .tag-groups-grid {
@@ -202,7 +211,6 @@
   backdrop-filter: blur(10px);
   transition: border-color 0.25s, box-shadow 0.25s;
 }
-/* When all matches are done, glow with the tag colour (set inline as --tag-color) */
 .group-card--done {
   border-color: rgba(255,255,255,0.18);
   box-shadow: 0 0 20px rgba(255,255,255,0.06);
@@ -271,7 +279,7 @@
 }
 
 /* ───────────────────────────────────
-   Winner banner (shown when all done)
+   Winner banner
 ─────────────────────────────────── */
 .gc-winner-banner {
   display: flex;
@@ -330,14 +338,12 @@
   background: var(--surface3);
   color: var(--text);
 }
-/* Winner highlight — use per-tag colours from TAG_META directly */
 .gm-player.gm-win {
   background: rgba(0,255,148,0.12);
   border-color: rgba(0,255,148,0.35);
   color: var(--neon-green);
   font-weight: 700;
 }
-/* Override per tag using data attribute set in GroupView */
 .group-card[data-tag="A"] .gm-player.gm-win {
   background: rgba(255,77,77,0.12);
   border-color: rgba(255,77,77,0.35);
@@ -383,7 +389,7 @@
 }
 
 /* ───────────────────────────────────
-   Standings toggle button
+   Standings toggle
 ─────────────────────────────────── */
 .gc-standings-toggle {
   display: block;
@@ -431,7 +437,6 @@
 .gs-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
 .gs-table tr.gs-top td { color: var(--text); }
 
-/* Winner row — A/B/C tag colours */
 .gs-table tr.gs-winner td { font-weight: 600; }
 .group-card[data-tag="A"] .gs-table tr.gs-winner td { background: rgba(255,77,77,0.08);  color: #ff7070; }
 .group-card[data-tag="B"] .gs-table tr.gs-winner td { background: rgba(251,191,36,0.08); color: #fbbf24; }
