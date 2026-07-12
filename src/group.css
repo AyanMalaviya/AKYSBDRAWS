@@ -1,5 +1,109 @@
-/* ── Group View Styles ── */
+/* ── Group CSS ──
+   Covers: Setup mode toggle, player tag selector, GroupView layout,
+   group cards, match rows, standings table, winner banner, summary panel.
+   All color values use tokens from index.css (:root).
+   --tag-color / --tag-glow are set as inline styles on .group-card
+   and inherited by all children inside it.
+*/
 
+/* ───────────────────────────────────
+   SETUP: Mode toggle bar
+─────────────────────────────────── */
+.mode-toggle-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 14px;
+}
+.mode-btn {
+  flex: 1;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+}
+.mode-btn:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+.mode-btn.active {
+  background: rgba(0,212,255,0.1);
+  color: var(--neon-blue);
+  border-color: rgba(0,212,255,0.3);
+  text-shadow: 0 0 8px rgba(0,212,255,0.45);
+  box-shadow: 0 0 14px rgba(0,212,255,0.1);
+}
+
+/* ───────────────────────────────────
+   SETUP: Tag legend (A / B / C)
+─────────────────────────────────── */
+.tag-legend {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.tag-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #000;
+}
+.tl-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ───────────────────────────────────
+   SETUP: Player row (name + tag buttons)
+─────────────────────────────────── */
+.gp-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.tag-selector {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.tag-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.14s ease;
+}
+.tag-btn:hover {
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+/* Active state is handled via inline style in Setup.jsx (background + color + boxShadow) */
+
+/* ───────────────────────────────────
+   GROUP VIEW: Outer layout
+─────────────────────────────────── */
 .group-view {
   display: flex;
   flex-direction: column;
@@ -9,10 +113,12 @@
   margin: 0 auto;
 }
 
-/* ── Overall summary banner ── */
+/* ───────────────────────────────────
+   All-done summary banner
+─────────────────────────────────── */
 .gv-summary {
-  background: linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,215,0,0.04));
-  border: 1px solid rgba(255,215,0,0.25);
+  background: rgba(255,215,0,0.06);
+  border: 1px solid rgba(255,215,0,0.22);
   border-radius: 12px;
   padding: 18px 20px;
 }
@@ -20,7 +126,7 @@
   font-size: 15px;
   font-weight: 700;
   color: #ffd700;
-  text-shadow: 0 0 8px rgba(255,215,0,0.5);
+  text-shadow: 0 0 8px rgba(255,215,0,0.45);
   margin-bottom: 12px;
 }
 .gv-summary-list {
@@ -32,34 +138,28 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 6px 12px;
 }
-.gv-summary-pos {
-  font-size: 11px;
-  color: var(--muted);
-  min-width: 16px;
-}
-.gv-summary-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-}
-.gv-summary-pts {
-  font-size: 12px;
-  color: var(--muted);
-}
+.gv-summary-pos  { font-size: 11px; color: var(--muted); min-width: 16px; }
+.gv-summary-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.gv-summary-pts  { font-size: 12px; color: var(--muted); }
 
-/* ── Tier section ── */
-.tag-section { display: flex; flex-direction: column; gap: 14px; }
-
+/* ───────────────────────────────────
+   Tier section header
+─────────────────────────────────── */
+.tag-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .tag-section-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -69,7 +169,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   color: #000;
   font-size: 13px;
@@ -90,20 +191,24 @@
   gap: 14px;
 }
 
-/* ── Group card ── */
+/* ───────────────────────────────────
+   Group card
+─────────────────────────────────── */
 .group-card {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(13,20,40,0.75);
+  border: 1px solid var(--border2);
   border-radius: 14px;
   overflow: hidden;
+  backdrop-filter: blur(10px);
   transition: border-color 0.25s, box-shadow 0.25s;
 }
+/* When all matches are done, glow with the tag colour (set inline as --tag-color) */
 .group-card--done {
-  border-color: color-mix(in srgb, var(--tag-color) 30%, transparent);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--tag-color) 15%, transparent);
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: 0 0 20px rgba(255,255,255,0.06);
 }
 
-/* Header */
+/* Card header */
 .gc-header { padding: 14px 16px 10px; }
 .gc-title-row {
   display: flex;
@@ -116,7 +221,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px; height: 22px;
+  width: 22px;
+  height: 22px;
   border-radius: 5px;
   color: #000;
   font-size: 11px;
@@ -126,15 +232,15 @@
 .gc-name {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
   flex: 1;
 }
 .gc-mixed-badge {
   font-size: 10px;
   font-weight: 600;
   color: #fbbf24;
-  background: rgba(251,191,36,0.15);
-  border: 1px solid rgba(251,191,36,0.3);
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.28);
   border-radius: 4px;
   padding: 1px 5px;
   text-transform: uppercase;
@@ -146,9 +252,10 @@
   flex-shrink: 0;
 }
 
+/* Progress bar */
 .gc-progress-bar {
   height: 3px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.07);
   border-radius: 99px;
   overflow: hidden;
   margin-bottom: 4px;
@@ -163,29 +270,37 @@
   color: var(--muted);
 }
 
-/* Winner banner */
+/* ───────────────────────────────────
+   Winner banner (shown when all done)
+─────────────────────────────────── */
 .gc-winner-banner {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 0 14px 12px;
   padding: 10px 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 10px;
-  animation: winnerPulse 1.5s ease-in-out;
+  animation: winnerPulse 0.55s cubic-bezier(0.16,1,0.3,1) both;
 }
 @keyframes winnerPulse {
-  0%   { transform: scale(0.97); opacity: 0.6; }
-  60%  { transform: scale(1.01); opacity: 1;   }
-  100% { transform: scale(1);    opacity: 1;   }
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
-.gc-winner-icon { font-size: 22px; flex-shrink: 0; }
-.gc-winner-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.gc-winner-name  { font-size: 15px; font-weight: 700; }
+.gc-winner-icon  { font-size: 22px; flex-shrink: 0; }
+.gc-winner-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gc-winner-name  { font-size: 15px; font-weight: 700; color: var(--text); }
 .gc-winner-stats { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-/* Matches */
+/* ───────────────────────────────────
+   Match rows
+─────────────────────────────────── */
 .gc-matches { padding: 0 14px; }
 
 .gm-row {
@@ -196,7 +311,7 @@
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .gm-row:last-child { border-bottom: none; }
-.gm-done .gm-player:not(.gm-win) { opacity: 0.4; }
+.gm-done .gm-player:not(.gm-win) { opacity: 0.38; }
 
 .gm-player {
   flex: 1;
@@ -204,19 +319,39 @@
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: #ccc;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
   cursor: pointer;
   text-align: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
 }
-.gm-player:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.gm-player:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+/* Winner highlight — use per-tag colours from TAG_META directly */
 .gm-player.gm-win {
-  background: color-mix(in srgb, var(--tag-color) 20%, transparent);
-  border-color: color-mix(in srgb, var(--tag-color) 40%, transparent);
-  color: #fff;
+  background: rgba(0,255,148,0.12);
+  border-color: rgba(0,255,148,0.35);
+  color: var(--neon-green);
   font-weight: 700;
+}
+/* Override per tag using data attribute set in GroupView */
+.group-card[data-tag="A"] .gm-player.gm-win {
+  background: rgba(255,77,77,0.12);
+  border-color: rgba(255,77,77,0.35);
+  color: #ff4d4d;
+}
+.group-card[data-tag="B"] .gm-player.gm-win {
+  background: rgba(251,191,36,0.12);
+  border-color: rgba(251,191,36,0.35);
+  color: #fbbf24;
+}
+.group-card[data-tag="C"] .gm-player.gm-win {
+  background: rgba(52,211,153,0.12);
+  border-color: rgba(52,211,153,0.35);
+  color: #34d399;
 }
 
 .gm-vs {
@@ -230,21 +365,26 @@
   border-radius: 5px;
   font-size: 11px;
   font-weight: 700;
-  color: #ccc;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s;
+  transition: background 0.14s, color 0.14s;
 }
-.gm-draw:hover { background: rgba(255,255,255,0.12); }
+.gm-draw:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
 .gm-draw.gm-win {
-  background: rgba(251,191,36,0.2);
-  border-color: rgba(251,191,36,0.4);
-  color: #fbbf24;
+  background: rgba(255,229,0,0.12);
+  border-color: rgba(255,229,0,0.35);
+  color: var(--neon-yellow);
 }
 
-/* Standings */
+/* ───────────────────────────────────
+   Standings toggle button
+─────────────────────────────────── */
 .gc-standings-toggle {
   display: block;
   width: 100%;
@@ -253,22 +393,27 @@
   font-weight: 600;
   color: var(--muted);
   background: rgba(255,255,255,0.03);
+  border: none;
   border-top: 1px solid rgba(255,255,255,0.07);
   cursor: pointer;
   text-align: center;
-  transition: background 0.15s, color 0.15s;
-  border-bottom: none;
-  border-left: none;
-  border-right: none;
+  transition: background 0.14s, color 0.14s;
 }
-.gc-standings-toggle:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.gc-standings-toggle:hover {
+  background: rgba(255,255,255,0.07);
+  color: var(--text);
+}
 
+/* ───────────────────────────────────
+   Standings table
+─────────────────────────────────── */
 .gs-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
-.gs-table th, .gs-table td {
+.gs-table th,
+.gs-table td {
   padding: 6px 10px;
   text-align: center;
 }
@@ -278,15 +423,34 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  background: rgba(255,255,255,0.04);
+  background: var(--surface2);
 }
-.gs-table td:nth-child(2) { text-align: left; }
+.gs-table td:nth-child(2),
 .gs-table th:nth-child(2) { text-align: left; }
-.gs-table tr { border-top: 1px solid rgba(255,255,255,0.05); }
-.gs-table tr:hover td { background: rgba(255,255,255,0.04); }
-.gs-table tr.gs-top td { color: #fff; }
-.gs-table tr.gs-winner td {
-  background: color-mix(in srgb, var(--tag-color, #ffd700) 10%, transparent);
-  font-weight: 600;
-}
+.gs-table tr { border-top: 1px solid var(--border); }
+.gs-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+.gs-table tr.gs-top td { color: var(--text); }
+
+/* Winner row — A/B/C tag colours */
+.gs-table tr.gs-winner td { font-weight: 600; }
+.group-card[data-tag="A"] .gs-table tr.gs-winner td { background: rgba(255,77,77,0.08);  color: #ff7070; }
+.group-card[data-tag="B"] .gs-table tr.gs-winner td { background: rgba(251,191,36,0.08); color: #fbbf24; }
+.group-card[data-tag="C"] .gs-table tr.gs-winner td { background: rgba(52,211,153,0.08); color: #34d399; }
+
 .gs-crown { font-size: 12px; }
+
+/* ───────────────────────────────────
+   Done glow border — per tag
+─────────────────────────────────── */
+.group-card--done[data-tag="A"] { border-color: rgba(255,77,77,0.35);   box-shadow: 0 0 18px rgba(255,77,77,0.12); }
+.group-card--done[data-tag="B"] { border-color: rgba(251,191,36,0.35);  box-shadow: 0 0 18px rgba(251,191,36,0.12); }
+.group-card--done[data-tag="C"] { border-color: rgba(52,211,153,0.35);  box-shadow: 0 0 18px rgba(52,211,153,0.12); }
+
+/* Winner banner border — per tag */
+.group-card[data-tag="A"] .gc-winner-banner { border-color: rgba(255,77,77,0.35);   box-shadow: 0 0 12px rgba(255,77,77,0.18); }
+.group-card[data-tag="B"] .gc-winner-banner { border-color: rgba(251,191,36,0.35);  box-shadow: 0 0 12px rgba(251,191,36,0.18); }
+.group-card[data-tag="C"] .gc-winner-banner { border-color: rgba(52,211,153,0.35);  box-shadow: 0 0 12px rgba(52,211,153,0.18); }
+
+.group-card[data-tag="A"] .gc-winner-name { color: #ff4d4d; }
+.group-card[data-tag="B"] .gc-winner-name { color: #fbbf24; }
+.group-card[data-tag="C"] .gc-winner-name { color: #34d399; }
