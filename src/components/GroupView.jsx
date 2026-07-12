@@ -80,9 +80,9 @@ function GroupCard({ group, onUpdate }) {
   return (
     <motion.div
       className={`group-card${allDone ? ' group-card--done' : ''}`}
+      data-tag={group.tag}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      style={{ '--tag-color': meta.color, '--tag-glow': meta.glow }}
     >
       {/* Header */}
       <div className="gc-header">
@@ -106,12 +106,11 @@ function GroupCard({ group, onUpdate }) {
           className="gc-winner-banner"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          style={{ borderColor: meta.color, boxShadow: `0 0 12px ${meta.glow}` }}
         >
           <span className="gc-winner-icon">👑</span>
           <div>
             <div className="gc-winner-label">Group Winner</div>
-            <div className="gc-winner-name" style={{ color: meta.color }}>{winner.name}</div>
+            <div className="gc-winner-name">{winner.name}</div>
             <div className="gc-winner-stats">{winner.wins}W · {winner.draws}D · {winner.losses}L · {winner.points}pts</div>
           </div>
         </motion.div>
@@ -148,7 +147,6 @@ export default function GroupView({ groups, onGroupsUpdate }) {
     onGroupsUpdate(recordGroupResult(groups, groupId, matchId, winner))
   }
 
-  // Check overall completion
   const allGroupsDone = groups.every(g => g.matches.every(m => m.winner !== null) && g.matches.length > 0)
   const groupWinners = groups.map(g => getGroupWinner(g)).filter(Boolean)
 
@@ -157,7 +155,6 @@ export default function GroupView({ groups, onGroupsUpdate }) {
 
   return (
     <div className="group-view">
-      {/* All-done summary */}
       <AnimatePresence>
         {allGroupsDone && groupWinners.length > 0 && (
           <motion.div
