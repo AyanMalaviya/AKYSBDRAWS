@@ -104,7 +104,17 @@ export default function App() {
     <div className="app-shell">
       <header className="topnav">
         <div className="topnav-brand" onClick={handleHome}>
-          <span className="brand-trophy">🏆</span>
+          {/* Replaced trophy icon with the new circular logo */}
+          <img 
+            src="/AKYSBLogoCircle.png" 
+            alt="AKYSB Logo" 
+            style={{ 
+              height: '40px', 
+              width: '40px', 
+              borderRadius: '50%', 
+              boxShadow: '0 0 12px rgba(0, 212, 255, 0.4)' 
+            }} 
+          />
           <div>
             <div className="brand-name">AKYSB <span className="brand-accent">DRAWS</span></div>
             <div className="brand-sub">Tournament Draw Manager</div>
