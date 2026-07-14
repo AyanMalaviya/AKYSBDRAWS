@@ -31,11 +31,14 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
   const [confirmId, setConfirmId]   = useState(null)
   const [confirmAllFlag, setAll]    = useState(false)
 
-  if (history.length === 0) return (
+  // FILTER: Only show tournaments that have been moved to history (archived)
+  const archivedHistory = history.filter(entry => entry.isArchived)
+
+  if (archivedHistory.length === 0) return (
     <div className="empty-state">
       <div style={{ fontSize: 52, filter: 'grayscale(0.3)' }}>📂</div>
       <div style={{ fontSize: 18, fontWeight: 800 }}>No history yet</div>
-      <div style={{ fontSize: 14, color: 'var(--muted)' }}>Play a tournament — it’ll appear here automatically.</div>
+      <div style={{ fontSize: 14, color: 'var(--muted)' }}>Delete a tournament from the Setup Lobby to move it here.</div>
     </div>
   )
 
@@ -44,14 +47,14 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
       <div className="dash-header">
         <div>
           <div className="dash-title">Tournament History</div>
-          <div className="dash-sub">{history.length} saved tournament{history.length!==1?'s':''}</div>
+          <div className="dash-sub">{archivedHistory.length} saved tournament{archivedHistory.length!==1?'s':''}</div>
         </div>
         <button className="btn btn-danger btn-sm" onClick={() => setAll(true)}>🗑 Clear All</button>
       </div>
 
       <div className="history-grid">
         <AnimatePresence>
-          {history.map((entry, i) => {
+          {archivedHistory.map((entry, i) => {
             const f = FORMATS.find(x => x.id === entry.format)
             return (
               <motion.div key={entry.id} className="hcard"
@@ -94,14 +97,14 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
       <AnimatePresence>
         {confirmId && (
           <ConfirmModal
-            msg="Delete this tournament from history? This cannot be undone."
+            msg="Permanently delete this tournament from history? This cannot be undone."
             onConfirm={() => { onDelete(confirmId); setConfirmId(null) }}
             onCancel={() => setConfirmId(null)}
           />
         )}
         {confirmAllFlag && (
           <ConfirmModal
-            msg={`Delete all ${history.length} tournaments? This cannot be undone.`}
+            msg={`Delete all ${archivedHistory.length} tournaments? This cannot be undone.`}
             onConfirm={() => { onDeleteAll(); setAll(false) }}
             onCancel={() => setAll(false)}
           />

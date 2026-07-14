@@ -1,20 +1,17 @@
-import React from 'react'
-import { motion } from 'framer-motion'
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import { TAG_META } from '../engine/groupEngine.js'
 import { useSetupStorage } from '../hooks/useSetupStorage.js'
 
 const PRESETS = [4, 8, 16, 32]
 const TAGS    = ['A', 'B', 'C']
-
 const MODE_BRACKET = 'bracket'
 const MODE_GROUP   = 'group'
-
 const DEFAULT_COUNT = 8
 
 const makePlayer  = (i)      => ({ id: `p${i+1}`, name: '', tag: 'B' })
-const makePlayers = (n, old) =>
-  Array.from({ length: n }, (_, i) => old?.[i] ?? makePlayer(i))
+const makePlayers = (n, old) => Array.from({ length: n }, (_, i) => old?.[i] ?? makePlayer(i))
 
 const defaults = {
   mode:         MODE_BRACKET,
@@ -26,9 +23,29 @@ const defaults = {
   activeGroupId: null,
 }
 
-// Added the history prop here!
-export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetup, history = [] }) {
+// Inline confirm modal to replace basic browser alerts
+function ConfirmModal({ msg, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1000 }}>
+      <motion.div className="modal-box"
+        initial={{ scale: 0.88, opacity: 0, y: 12 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.88, opacity: 0, y: 8 }}
+        transition={{ duration: 0.2 }}>
+        <div className="modal-icon">⚠️</div>
+        <div className="modal-msg">{msg}</div>
+        <div className="modal-btns">
+          <button className="btn btn-ghost" onClick={onCancel} style={{ minWidth: 90 }}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm} style={{ minWidth: 90 }}>Archive</button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGroup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   // ── Bracket helpers ──
   const applyCount = (n) => {
@@ -49,8 +66,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetu
 
   // ── Group Card & Lobby Helpers ──
   const activeGroup = s.groupSetups.find(g => g.id === s.activeGroupId)
-  
-  // REAL-TIME CHECK: Does this group ID exist in our history array?
   const isActiveGenerated = activeGroup ? history.some(h => h.id === activeGroup.id) : false
 
   const handleCreateGroup = () => {
@@ -79,12 +94,14 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetu
     set('groupSetups', prev => prev.map(g => g.id === s.activeGroupId ? { ...g, ...updates } : g))
   }
 
-  const deleteGroupSetup = (id) => {
-    if (confirm("Delete this tournament setup card?")) {
-      set('groupSetups', prev => prev.filter(g => g.id !== id))
-      if (s.activeGroupId === id) set('activeGroupId', null)
-      onDeleteSetup?.(id)
-    }
+  const confirmDeleteGroupSetup = (id) => {
+    set('groupSetups', prev => prev.filter(g => g.id !== id))
+    if (s.activeGroupId === id) set('activeGroupId', null)
+    
+    // Instead of total deletion, it triggers the move to history.
+    // If it was just a draft (never generated), it won't be in history to begin with, so it deletes cleanly.
+    onArchiveGroup?.(id) 
+    setConfirmDeleteId(null)
   }
 
   const applyGroupCount = (n) => {
@@ -245,44 +262,64 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetu
                 </div>
                 
                 <div className="formats-grid">
-                  {/* Existing Tournament Cards */}
+                  {/* Updated Visuals for Existing Tournament Cards */}
                   {s.groupSetups.map(g => {
                     const isGenerated = history.some(h => h.id === g.id); // Live check!
                     return (
-                    <div key={g.id} className="format-tile" style={{ position: 'relative' }} 
+                    <div key={g.id} className="format-tile" 
+                         style={{ 
+                           position: 'relative', display: 'flex', flexDirection: 'column', 
+                           textAlign: 'left', padding: '16px', gap: '12px',
+                           background: isGenerated ? 'linear-gradient(145deg, rgba(0,212,255,0.06) 0%, rgba(0,212,255,0.01) 100%)' : 'var(--glass)',
+                           border: isGenerated ? '1px solid rgba(0,212,255,0.3)' : '1px solid var(--border2)',
+                           boxShadow: isGenerated ? '0 4px 20px rgba(0,212,255,0.05)' : 'none',
+                           transition: 'all 0.2s ease'
+                         }} 
                          onClick={() => {
-                           // Open directly to the groups view if generated, otherwise open setup
                            if (isGenerated && onOpenGroup) {
                              onOpenGroup(g.id);
                            } else {
                              set('activeGroupId', g.id);
                            }
                          }}>
-                      <div className="format-tile-name" style={{ fontSize: 16, paddingRight: 40 }}>{g.title}</div>
-                      <div className="format-tile-desc" style={{ marginTop: 6 }}>{g.players.length} players · Size {g.size}</div>
-                      
-                      {/* Action buttons */}
-                      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 10 }}>
-                        {isGenerated && (
+                         
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div className="format-tile-name" style={{ fontSize: 18, color: isGenerated ? 'var(--neon-blue)' : 'var(--text)' }}>{g.title}</div>
+                          <div className="format-tile-desc" style={{ marginTop: 4 }}>{g.players.length} players · Size {g.size}</div>
+                        </div>
+
+                        {/* Updated Action buttons */}
+                        <div style={{ display: 'flex', gap: 6, zIndex: 10 }}>
+                          {isGenerated && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id); }}
+                              style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-yellow)', cursor: 'pointer', transition: 'background 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                              title="Edit Setup"
+                            >✎</button>
+                          )}
                           <button
-                            onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id); }}
-                            style={{ background: 'none', color: 'var(--neon-yellow)', fontSize: 14, cursor: 'pointer' }}
-                            title="Edit Setup"
-                          >✎</button>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteGroupSetup(g.id); }}
-                          style={{ background: 'none', color: 'var(--neon-pink)', fontSize: 14, cursor: 'pointer' }}
-                          title="Delete Setup"
-                        >✕</button>
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(g.id); }}
+                            style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-pink)', cursor: 'pointer', transition: 'background 0.2s' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            title="Delete & Archive"
+                          >✕</button>
+                        </div>
                       </div>
 
-                      {/* Active Status Badge */}
-                      {isGenerated && (
-                          <div style={{ position: 'absolute', bottom: 12, right: 12 }}>
-                              <span className="tag tag-green" style={{ fontSize: 9 }}>Active</span>
-                          </div>
-                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
+                         {isGenerated ? (
+                           <span className="tag tag-green" style={{ fontSize: 10, padding: '4px 8px' }}>● Active</span>
+                         ) : (
+                           <span className="tag" style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.08)' }}>Draft</span>
+                         )}
+                         <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
+                           {isGenerated ? 'Open Matches →' : 'Setup Draft →'}
+                         </span>
+                      </div>
                     </div>
                   )})}
                   
@@ -436,6 +473,17 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetu
             }}
           >🗑 Reset all setup data</button>
         </motion.div>
+
+        {/* Modal Mount for Delete */}
+        <AnimatePresence>
+          {confirmDeleteId && (
+            <ConfirmModal
+              msg="Delete this card and move the tournament results to History?"
+              onConfirm={() => confirmDeleteGroupSetup(confirmDeleteId)}
+              onCancel={() => setConfirmDeleteId(null)}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </>
   )

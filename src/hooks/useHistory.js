@@ -13,7 +13,6 @@ export function useHistory() {
     catch {}
   }, [history])
 
-  // UPSERT by tournamentId — never creates duplicates
   const upsertHistory = (tournament) => {
     if (!tournament?.id) return
     setHistory(prev => {
@@ -21,7 +20,7 @@ export function useHistory() {
       const entry = {
         id: tournament.id,
         savedAt: new Date().toISOString(),
-        type: tournament.type || 'bracket', // Identifies if it's a bracket or group
+        type: tournament.type || 'bracket',
         title: tournament.title || '',
         format: tournament.format || 'groups',
         playerCount: tournament.players?.length || 0,
@@ -29,20 +28,28 @@ export function useHistory() {
         bracket: tournament.bracket,
         groups: tournament.groups,
         champion: tournament.bracket?.champion || null,
+        // Inherits previous status or defaults to the one provided
+        isArchived: tournament.isArchived !== undefined ? tournament.isArchived : (existing >= 0 ? prev[existing].isArchived : false)
       }
       if (existing >= 0) {
         const next = [...prev]
         next[existing] = entry
         return next
       }
-      // Limits history to 10 concurrent tournaments
-      return [entry, ...prev].slice(0, 10)
+      // Increased to 30 to hold a comfortable mix of active and history items
+      return [entry, ...prev].slice(0, 30)
     })
   }
 
+  // Used to move an active tournament to the dashboard
+  const archiveEntry = (id) => setHistory(prev => prev.map(e => e.id === id ? { ...e, isArchived: true } : e))
+  
   const deleteEntry = (id) => setHistory(prev => prev.filter(e => e.id !== id))
-  const deleteAll = () => setHistory([])
-  const restoreEntry = (entry) => entry // Return the full entry
+  
+  // Only clear the archived tournaments from dashboard, protect active games
+  const deleteAll = () => setHistory(prev => prev.filter(e => !e.isArchived)) 
+  
+  const restoreEntry = (entry) => entry 
 
-  return { history, upsertHistory, deleteEntry, deleteAll, restoreEntry }
+  return { history, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry }
 }

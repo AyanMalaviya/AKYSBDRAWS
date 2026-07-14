@@ -12,7 +12,7 @@ export default function App() {
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
   const [groups, setGroups]         = useState(null)
-  const { history, upsertHistory, deleteEntry, deleteAll, restoreEntry } = useHistory()
+  const { history, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry } = useHistory()
 
   // ── Bracket mode ──
   const handleStart = ({ format, players }) => {
@@ -20,6 +20,7 @@ export default function App() {
       id: Date.now().toString(),
       format, players,
       bracket: generateBracket(format, players),
+      isArchived: true // Brackets skip the lobby and go straight to history
     }
     setTournament(t)
     upsertHistory(t)
@@ -39,12 +40,13 @@ export default function App() {
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
     const t = {
-      id: id || Date.now().toString(), // VERY IMPORTANT! Now uses the Setup card's ID
+      id: id || Date.now().toString(),
       type: 'group',
       title: title || 'Group Draw',
       players,
       groupSize,
-      groups: g
+      groups: g,
+      isArchived: false // Marks it as Active, keeping it out of Dashboard
     }
     setTournament(t)
     setGroups(g)
@@ -54,7 +56,6 @@ export default function App() {
 
   const handleGroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
-    // Save every match click to history
     setTournament(prev => {
       if (!prev) return prev
       const updated = { ...prev, groups: updatedGroups }
@@ -75,7 +76,6 @@ export default function App() {
     }
   }
 
-  // Back to setup WITHOUT losing setup state (no clearAll called)
   const handleHome  = () => { setTournament(null); setGroups(null); setView('home') }
 
   return (
@@ -93,7 +93,7 @@ export default function App() {
             New Draw
           </button>
           <button className={`nav-pill${view === 'dashboard' ? ' active' : ''}`} onClick={() => setView('dashboard')}>
-            History {history.length > 0 && <span className="nav-count">{history.length}</span>}
+            History {history.filter(h => h.isArchived).length > 0 && <span className="nav-count">{history.filter(h => h.isArchived).length}</span>}
           </button>
         </nav>
       </header>
@@ -102,12 +102,11 @@ export default function App() {
         {view === 'dashboard' && (
           <Dashboard history={history} onRestore={handleRestore} onDelete={deleteEntry} onDeleteAll={deleteAll} />
         )}
-        {/* We add handleOpenGroup to find and restore the tournament from history */}
         {view === 'home' && (
           <Setup 
             onStart={handleStart} 
             onGroupStart={handleGroupStart} 
-            onDeleteSetup={deleteEntry}
+            onArchiveGroup={archiveEntry}
             onOpenGroup={(id) => {
               const entry = history.find(e => e.id === id)
               if (entry) {
@@ -124,17 +123,13 @@ export default function App() {
         )}
         {view === 'groups' && groups && (
           <div>
-            {/* Back to setup button — keeps all form data */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 0 0' }}>
               <button
                 onClick={handleHome}
                 style={{
-                  fontSize: 13, fontWeight: 600,
-                  color: 'var(--neon-blue)',
-                  background: 'rgba(0,212,255,0.08)',
-                  border: '1px solid rgba(0,212,255,0.25)',
-                  borderRadius: 10, padding: '7px 16px',
-                  cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600, color: 'var(--neon-blue)',
+                  background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.25)',
+                  borderRadius: 10, padding: '7px 16px', cursor: 'pointer',
                 }}
               >← Back to Setup</button>
             </div>
@@ -142,7 +137,6 @@ export default function App() {
           </div>
         )}
       </main>
-
       <Footer />
     </div>
   )
