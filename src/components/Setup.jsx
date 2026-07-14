@@ -18,19 +18,16 @@ const makePlayers = (n, old) =>
 
 const defaults = {
   mode:         MODE_BRACKET,
-  // bracket
   format:       'single_elim',
   count:        DEFAULT_COUNT,
   custom:       '',
   names:        makePlayers(DEFAULT_COUNT),
-  // group
-  groupCount:   DEFAULT_COUNT,
-  groupCustom:  '',
-  groupSize:    4,
-  groupPlayers: makePlayers(DEFAULT_COUNT),
+  groupSetups:  [],
+  activeGroupId: null,
 }
 
-export default function Setup({ onStart, onGroupStart }) {
+// Added the history prop here!
+export default function Setup({ onStart, onGroupStart, onOpenGroup, onDeleteSetup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
 
   // ── Bracket helpers ──
@@ -47,39 +44,80 @@ export default function Setup({ onStart, onGroupStart }) {
       set('names', makePlayers(n, s.names))
     }
   }
-  const updateName = (i, v) =>
-    set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
+  const updateName = (i, v) => set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
+  const clearNames = () => set('names', s.names.map(p => ({ ...p, name: '' })))
 
-  const clearNames = () =>
-    set('names', s.names.map(p => ({ ...p, name: '' })))
+  // ── Group Card & Lobby Helpers ──
+  const activeGroup = s.groupSetups.find(g => g.id === s.activeGroupId)
+  
+  // REAL-TIME CHECK: Does this group ID exist in our history array?
+  const isActiveGenerated = activeGroup ? history.some(h => h.id === activeGroup.id) : false
 
-  // ── Group helpers ──
-  const applyGroupCount = (n) => {
-    set('groupCount', n)
-    set('groupCustom', String(n))
-    set('groupPlayers', makePlayers(n, s.groupPlayers))
+  const handleCreateGroup = () => {
+    if (s.groupSetups.length >= 10) {
+      alert("Maximum of 10 active setup cards reached!")
+      return
+    }
+    const title = prompt("Enter Tournament Title (e.g., U 18 A 18):")
+    if (!title) return 
+    
+    const newId = Date.now().toString()
+    const newSetup = {
+      id: newId,
+      title,
+      count: DEFAULT_COUNT,
+      custom: String(DEFAULT_COUNT),
+      size: 4,
+      players: makePlayers(DEFAULT_COUNT)
+    }
+    
+    set('groupSetups', [...s.groupSetups, newSetup])
+    set('activeGroupId', newId)
   }
-  const onGroupCustom = (val) => {
-    set('groupCustom', val)
-    const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) {
-      set('groupCount', n)
-      set('groupPlayers', makePlayers(n, s.groupPlayers))
+
+  const updateActiveGroup = (updates) => {
+    set('groupSetups', prev => prev.map(g => g.id === s.activeGroupId ? { ...g, ...updates } : g))
+  }
+
+  const deleteGroupSetup = (id) => {
+    if (confirm("Delete this tournament setup card?")) {
+      set('groupSetups', prev => prev.filter(g => g.id !== id))
+      if (s.activeGroupId === id) set('activeGroupId', null)
+      onDeleteSetup?.(id)
     }
   }
-  const updateGroupName = (i, v) =>
-    set('groupPlayers', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
-  const updateGroupTag  = (i, tag) =>
-    set('groupPlayers', prev => prev.map((x, idx) => idx === i ? { ...x, tag } : x))
 
-  const clearGroupNames = () =>
-    set('groupPlayers', s.groupPlayers.map(p => ({ ...p, name: '' })))
+  const applyGroupCount = (n) => {
+    if (!activeGroup) return
+    updateActiveGroup({ count: n, custom: String(n), players: makePlayers(n, activeGroup.players) })
+  }
+  
+  const onGroupCustom = (val) => {
+    if (!activeGroup) return
+    updateActiveGroup({ custom: val })
+    const n = parseInt(val)
+    if (!isNaN(n) && n >= 2 && n <= 64) {
+      updateActiveGroup({ count: n, players: makePlayers(n, activeGroup.players) })
+    }
+  }
+
+  const updateGroupName = (i, v) => {
+    if (!activeGroup) return
+    updateActiveGroup({ players: activeGroup.players.map((x, idx) => idx === i ? { ...x, name: v } : x) })
+  }
+
+  const updateGroupTag = (i, tag) => {
+    if (!activeGroup) return
+    updateActiveGroup({ players: activeGroup.players.map((x, idx) => idx === i ? { ...x, tag } : x) })
+  }
+
+  const clearGroupNames = () => {
+    if (!activeGroup) return
+    updateActiveGroup({ players: activeGroup.players.map(p => ({ ...p, name: '' })) })
+  }
 
   const fmt = FORMATS.find(f => f.id === s.format)
-
-  // Resolve display names (fall back to 'Player N' placeholder on submit only)
-  const resolvedNames       = s.names.map((p, i)       => ({ ...p, name: p.name || `Player ${i+1}` }))
-  const resolvedGroupPlayers = s.groupPlayers.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+  const resolvedNames = s.names.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
 
   return (
     <>
@@ -104,7 +142,7 @@ export default function Setup({ onStart, onGroupStart }) {
           >🏆 Bracket Draw</button>
           <button
             className={`mode-btn${s.mode === MODE_GROUP ? ' active' : ''}`}
-            onClick={() => set('mode', MODE_GROUP)}
+            onClick={() => { set('mode', MODE_GROUP); set('activeGroupId', null); }}
           >🎯 Group Draw</button>
         </motion.div>
 
@@ -194,104 +232,194 @@ export default function Setup({ onStart, onGroupStart }) {
           </>
         )}
 
-        {/* ═══ GROUP MODE ═══ */}
+        {/* ═══ GROUP MODE (CARD LOBBY SYSTEM) ═══ */}
         {s.mode === MODE_GROUP && (
           <>
-            <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <div className="step-label">
-                <div className="step-num">1</div>
-                <div className="step-title">Number of Players</div>
-              </div>
-              <div className="count-presets">
-                {PRESETS.map(n => (
-                  <button key={n} className={`count-btn${s.groupCount === n ? ' sel' : ''}`}
-                    onClick={() => applyGroupCount(n)}>{n}</button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input
-                  type="number" min="2" max="64" placeholder="Custom (2–64)"
-                  value={s.groupCustom}
-                  onChange={e => onGroupCustom(e.target.value)}
-                  style={{ maxWidth: 160 }}
-                />
-                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                  {s.groupPlayers.length} players
-                </span>
-              </div>
-            </motion.div>
-
-            <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-              <div className="step-label">
-                <div className="step-num">2</div>
-                <div className="step-title">Players per Group</div>
-              </div>
-              <div className="count-presets">
-                {[2, 3, 4, 5, 6].map(n => (
-                  <button key={n} className={`count-btn${s.groupSize === n ? ' sel' : ''}`}
-                    onClick={() => set('groupSize', n)}>{n}</button>
-                ))}
-              </div>
-              <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                Each group plays a full round-robin among same-tier players
-              </div>
-            </motion.div>
-
-            {s.groupPlayers.length > 0 && (
-              <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
-                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+            {s.activeGroupId === null ? (
+              /* ── LOBBY VIEW ── */
+              <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
+                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                 <div className="step-label">
-                  <div className="step-num">3</div>
-                  <div className="step-title">Players &amp; Skill Tags</div>
-                  <button className="clear-names-btn" onClick={clearGroupNames} title="Clear all names">✕ Clear All</button>
+                  <div className="step-num">1</div>
+                  <div className="step-title">Tournament Setup Lobby ({s.groupSetups.length}/10)</div>
                 </div>
-                <div className="tag-legend">
-                  {TAGS.map(t => (
-                    <span key={t} className="tag-legend-item">
-                      <span className="tl-badge" style={{ background: TAG_META[t].color }}>{t}</span>
-                      <span className="tl-label">{TAG_META[t].label}</span>
-                    </span>
-                  ))}
-                </div>
-                <div className="names-grid">
-                  {s.groupPlayers.map((p, i) => (
-                    <div key={p.id} className="gp-row">
-                      <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
-                      <input
-                        value={p.name}
-                        onChange={e => updateGroupName(i, e.target.value)}
-                        placeholder={`Player ${i+1}`}
-                        style={{ flex: 1 }}
-                      />
-                      <div className="tag-selector">
-                        {TAGS.map(t => (
+                
+                <div className="formats-grid">
+                  {/* Existing Tournament Cards */}
+                  {s.groupSetups.map(g => {
+                    const isGenerated = history.some(h => h.id === g.id); // Live check!
+                    return (
+                    <div key={g.id} className="format-tile" style={{ position: 'relative' }} 
+                         onClick={() => {
+                           // Open directly to the groups view if generated, otherwise open setup
+                           if (isGenerated && onOpenGroup) {
+                             onOpenGroup(g.id);
+                           } else {
+                             set('activeGroupId', g.id);
+                           }
+                         }}>
+                      <div className="format-tile-name" style={{ fontSize: 16, paddingRight: 40 }}>{g.title}</div>
+                      <div className="format-tile-desc" style={{ marginTop: 6 }}>{g.players.length} players · Size {g.size}</div>
+                      
+                      {/* Action buttons */}
+                      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 10 }}>
+                        {isGenerated && (
                           <button
-                            key={t}
-                            className={`tag-btn${p.tag === t ? ' active' : ''}`}
-                            style={p.tag === t ? { background: TAG_META[t].color, color: '#000', boxShadow: `0 0 8px ${TAG_META[t].glow}` } : {}}
-                            onClick={() => updateGroupTag(i, t)}
-                          >{t}</button>
+                            onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id); }}
+                            style={{ background: 'none', color: 'var(--neon-yellow)', fontSize: 14, cursor: 'pointer' }}
+                            title="Edit Setup"
+                          >✎</button>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteGroupSetup(g.id); }}
+                          style={{ background: 'none', color: 'var(--neon-pink)', fontSize: 14, cursor: 'pointer' }}
+                          title="Delete Setup"
+                        >✕</button>
+                      </div>
+
+                      {/* Active Status Badge */}
+                      {isGenerated && (
+                          <div style={{ position: 'absolute', bottom: 12, right: 12 }}>
+                              <span className="tag tag-green" style={{ fontSize: 9 }}>Active</span>
+                          </div>
+                      )}
+                    </div>
+                  )})}
+                  
+                  {/* Create New Card Button */}
+                  {s.groupSetups.length < 10 && (
+                    <div className="format-tile" onClick={handleCreateGroup} 
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(0,212,255,0.4)', background: 'rgba(0,212,255,0.03)', minHeight: 90 }}>
+                      <div style={{ fontSize: 28, color: 'var(--neon-blue)', fontWeight: 900, lineHeight: 1 }}>+</div>
+                      <div style={{ fontSize: 12, color: 'var(--neon-blue)', marginTop: 8, fontWeight: 700 }}>New Tournament</div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ) : (
+              /* ── ACTIVE SETUP VIEW ── */
+              activeGroup && (
+                <>
+                  <motion.div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', padding: '0 4px' }}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <button onClick={() => set('activeGroupId', null)} className="btn btn-ghost btn-sm" style={{ padding: '6px 14px' }}>← Back to Lobby</button>
+                    <h3 style={{ margin: 0, color: 'var(--neon-blue)', fontSize: 18 }}>
+                      {activeGroup.title} {isActiveGenerated && <span style={{fontSize: 12, color: 'var(--neon-yellow)', marginLeft: 8}}>(Editing Active)</span>}
+                    </h3>
+                  </motion.div>
+
+                  <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
+                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                    <div className="step-label">
+                      <div className="step-num">2</div>
+                      <div className="step-title">Number of Players</div>
+                    </div>
+                    <div className="count-presets">
+                      {PRESETS.map(n => (
+                        <button key={n} className={`count-btn${activeGroup.count === n ? ' sel' : ''}`}
+                          onClick={() => applyGroupCount(n)}>{n}</button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <input
+                        type="number" min="2" max="64" placeholder="Custom (2–64)"
+                        value={activeGroup.custom}
+                        onChange={e => onGroupCustom(e.target.value)}
+                        style={{ maxWidth: 160 }}
+                      />
+                      <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                        {activeGroup.players.length} players
+                      </span>
+                    </div>
+                  </motion.div>
+
+                  <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
+                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+                    <div className="step-label">
+                      <div className="step-num">3</div>
+                      <div className="step-title">Players per Group</div>
+                    </div>
+                    <div className="count-presets">
+                      {[2, 3, 4, 5, 6].map(n => (
+                        <button key={n} className={`count-btn${activeGroup.size === n ? ' sel' : ''}`}
+                          onClick={() => updateActiveGroup({ size: n })}>{n}</button>
+                      ))}
+                    </div>
+                    <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
+                      Each group plays a full round-robin among same-tier players
+                    </div>
+                  </motion.div>
+
+                  {activeGroup.players.length > 0 && (
+                    <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
+                      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+                      <div className="step-label">
+                        <div className="step-num">4</div>
+                        <div className="step-title">Players &amp; Skill Tags</div>
+                        <button className="clear-names-btn" onClick={clearGroupNames} title="Clear all names">✕ Clear All</button>
+                      </div>
+                      <div className="tag-legend">
+                        {TAGS.map(t => (
+                          <span key={t} className="tag-legend-item">
+                            <span className="tl-badge" style={{ background: TAG_META[t].color }}>{t}</span>
+                            <span className="tl-label">{TAG_META[t].label}</span>
+                          </span>
                         ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                      <div className="names-grid">
+                        {activeGroup.players.map((p, i) => (
+                          <div key={p.id} className="gp-row">
+                            <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
+                            <input
+                              value={p.name}
+                              onChange={e => updateGroupName(i, e.target.value)}
+                              placeholder={`Player ${i+1}`}
+                              style={{ flex: 1 }}
+                            />
+                            <div className="tag-selector">
+                              {TAGS.map(t => (
+                                <button
+                                  key={t}
+                                  className={`tag-btn${p.tag === t ? ' active' : ''}`}
+                                  style={p.tag === t ? { background: TAG_META[t].color, color: '#000', boxShadow: `0 0 8px ${TAG_META[t].glow}` } : {}}
+                                  onClick={() => updateGroupTag(i, t)}
+                                >{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
 
-            {s.groupPlayers.length >= 2 && (
-              <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-                <button className="gen-btn"
-                  onClick={() => onGroupStart({ players: resolvedGroupPlayers, groupSize: s.groupSize })}>
-                  Generate Groups →
-                </button>
-                <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                  {s.groupPlayers.length} players · {s.groupSize} per group · tag-matched
-                </div>
-              </motion.div>
+                  {activeGroup.players.length >= 2 && (
+                    <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                      <button className="gen-btn"
+                        onClick={() => {
+                          if (isActiveGenerated) {
+                            const proceed = confirm("⚠️ Regenerating will reset all current match scores for this group. Do you want to continue?");
+                            if (!proceed) return;
+                          }
+
+                          const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+                          
+                          onGroupStart({
+                            id: activeGroup.id,
+                            title: activeGroup.title,
+                            players: resolvedGroupPlayers,
+                            groupSize: activeGroup.size
+                          })
+                        }}>
+                        {isActiveGenerated ? "Regenerate Groups ↻" : "Generate Groups →"}
+                      </button>
+                      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
+                        {activeGroup.players.length} players · {activeGroup.size} per group · tag-matched
+                      </div>
+                    </motion.div>
+                  )}
+                </>
+              )
             )}
           </>
         )}

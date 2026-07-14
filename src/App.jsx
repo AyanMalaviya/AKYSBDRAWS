@@ -35,23 +35,44 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // ── Group mode ──
-  const handleGroupStart = ({ players, groupSize }) => {
+// ── Group mode ──
+  const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
+    const t = {
+      id: id || Date.now().toString(), // VERY IMPORTANT! Now uses the Setup card's ID
+      type: 'group',
+      title: title || 'Group Draw',
+      players,
+      groupSize,
+      groups: g
+    }
+    setTournament(t)
     setGroups(g)
-    setTournament(null)
+    upsertHistory(t)
     setView('groups')
   }
 
   const handleGroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
-  }, [])
+    // Save every match click to history
+    setTournament(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, groups: updatedGroups }
+      upsertHistory(updated)
+      return updated
+    })
+  }, [upsertHistory])
 
   // ── History restore ──
   const handleRestore = (entry) => {
-    setTournament(restoreEntry(entry))
-    setGroups(null)
-    setView('bracket')
+    setTournament(entry)
+    if (entry.type === 'group') {
+      setGroups(entry.groups)
+      setView('groups')
+    } else {
+      setGroups(null)
+      setView('bracket')
+    }
   }
 
   // Back to setup WITHOUT losing setup state (no clearAll called)
@@ -81,7 +102,23 @@ export default function App() {
         {view === 'dashboard' && (
           <Dashboard history={history} onRestore={handleRestore} onDelete={deleteEntry} onDeleteAll={deleteAll} />
         )}
-        {view === 'home' && <Setup onStart={handleStart} onGroupStart={handleGroupStart} />}
+        {/* We add handleOpenGroup to find and restore the tournament from history */}
+        {view === 'home' && (
+          <Setup 
+            onStart={handleStart} 
+            onGroupStart={handleGroupStart} 
+            onDeleteSetup={deleteEntry}
+            onOpenGroup={(id) => {
+              const entry = history.find(e => e.id === id)
+              if (entry) {
+                handleRestore(entry)
+              } else {
+                alert("Tournament data not found in history. It may have been cleared.")
+              }
+            }}
+            history={history}
+          />
+        )}
         {view === 'bracket' && tournament && (
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}

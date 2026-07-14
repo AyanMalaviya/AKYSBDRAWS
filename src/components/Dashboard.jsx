@@ -58,9 +58,18 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
                 <div className="hcard-top">
-                  <span className={`tag ${f?.color}`}>{f?.tag}</span>
-                  <span className="hcard-fmt">{f?.label}</span>
-                  {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
+                  {entry.type === 'group' ? (
+                    <>
+                      <span className="tag tag-orange">GRP</span>
+                      <span className="hcard-fmt">{entry.title || 'Group Stage'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`tag ${f?.color}`}>{f?.tag}</span>
+                      <span className="hcard-fmt">{f?.label}</span>
+                      {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
+                    </>
+                  )}
                 </div>
                 <div className="hcard-meta">
                   <span>👥 {entry.playerCount} players</span>

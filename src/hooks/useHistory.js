@@ -21,10 +21,13 @@ export function useHistory() {
       const entry = {
         id: tournament.id,
         savedAt: new Date().toISOString(),
-        format: tournament.format,
-        playerCount: tournament.players.length,
-        players: tournament.players,
+        type: tournament.type || 'bracket', // Identifies if it's a bracket or group
+        title: tournament.title || '',
+        format: tournament.format || 'groups',
+        playerCount: tournament.players?.length || 0,
+        players: tournament.players || [],
         bracket: tournament.bracket,
+        groups: tournament.groups,
         champion: tournament.bracket?.champion || null,
       }
       if (existing >= 0) {
@@ -32,18 +35,14 @@ export function useHistory() {
         next[existing] = entry
         return next
       }
-      return [entry, ...prev].slice(0, 50)
+      // Limits history to 10 concurrent tournaments
+      return [entry, ...prev].slice(0, 10)
     })
   }
 
   const deleteEntry = (id) => setHistory(prev => prev.filter(e => e.id !== id))
   const deleteAll = () => setHistory([])
-  const restoreEntry = (entry) => ({
-    id: entry.id,
-    format: entry.format,
-    players: entry.players,
-    bracket: entry.bracket,
-  })
+  const restoreEntry = (entry) => entry // Return the full entry
 
   return { history, upsertHistory, deleteEntry, deleteAll, restoreEntry }
 }
