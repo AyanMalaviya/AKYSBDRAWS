@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import Setup from './components/Setup.jsx'
 import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
@@ -12,7 +12,29 @@ export default function App() {
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
   const [groups, setGroups]         = useState(null)
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
   const { history, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry } = useHistory()
+
+  // ── PWA Install Logic ──
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   // ── Bracket mode ──
   const handleStart = ({ format, players }) => {
@@ -89,8 +111,13 @@ export default function App() {
           </div>
         </div>
         <nav className="topnav-nav">
+          {deferredPrompt && (
+            <button className="nav-pill nav-install-btn" onClick={handleInstallClick}>
+              <span className="hide-mob">↓ Install </span>App
+            </button>
+          )}
           <button className={`nav-pill${view !== 'dashboard' ? ' active' : ''}`} onClick={handleHome}>
-            New Draw
+            <span className="hide-mob">New </span>Draw
           </button>
           <button className={`nav-pill${view === 'dashboard' ? ' active' : ''}`} onClick={() => setView('dashboard')}>
             History {history.filter(h => h.isArchived).length > 0 && <span className="nav-count">{history.filter(h => h.isArchived).length}</span>}
@@ -122,7 +149,6 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
         {view === 'groups' && groups && (
-          // Passing down handleHome to the integrated toolbar inside GroupView
           <GroupView groups={groups} onGroupsUpdate={handleGroupsUpdate} onBack={handleHome} />
         )}
       </main>

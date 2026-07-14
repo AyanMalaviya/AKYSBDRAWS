@@ -7,45 +7,45 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Ensure sw is regenerated on every build
-      devOptions: { enabled: false },
-      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+      injectRegister: 'auto',
+      
+      // ⚠️ IMPORTANT: Keep this FALSE during development. 
+      devOptions: { 
+        enabled: false 
+      },
+      
+      // Tell Vite to cache your new icons folder for offline use
+      includeAssets: [
+        'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 
+        'icons/icon-48x48.png', 'icons/icon-72x72.png', 'icons/icon-96x96.png',
+        'icons/icon-128x128.png', 'icons/icon-144x144.png', 'icons/icon-152x152.png',
+        'icons/icon-192x192.png', 'icons/icon-384x384.png', 'icons/icon-512x512.png'
+      ],
       manifest: {
-        name: 'AKYSBDRAWS Tournament',
-        short_name: 'AKYSBDRAWS',
-        description: 'Offline tournament bracket draw app',
-        theme_color: '#0f172a',
+        name: 'AKYSB DRAWS',
+        short_name: 'AKYSB',
+        description: 'An app built for organizing tournaments',
+        theme_color: '#0f172a', // Matches your dark theme perfectly
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'any',
         start_url: '/',
         scope: '/',
         icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable'
-          }
+          { src: 'icons/icon-48x48.png', sizes: '48x48', type: 'image/png' },
+          { src: 'icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
+          { src: 'icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
+          { src: 'icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
+          { src: 'icons/icon-144x144.png', sizes: '144x144', type: 'image/png' },
+          { src: 'icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
+          { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-384x384.png', sizes: '384x384', type: 'image/png' },
+          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
       workbox: {
-        // Cache all static assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
-        // Navigate fallback: all non-API routes serve index.html (fixes 404 on reload)
-        navigateFallback: 'index.html',
+        navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
