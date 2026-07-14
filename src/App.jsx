@@ -20,7 +20,7 @@ export default function App() {
       id: Date.now().toString(),
       format, players,
       bracket: generateBracket(format, players),
-      isArchived: true // Brackets skip the lobby and go straight to history
+      isArchived: true
     }
     setTournament(t)
     upsertHistory(t)
@@ -46,7 +46,7 @@ export default function App() {
       players,
       groupSize,
       groups: g,
-      isArchived: false // Marks it as Active, keeping it out of Dashboard
+      isArchived: false 
     }
     setTournament(t)
     setGroups(g)
@@ -122,19 +122,8 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
         {view === 'groups' && groups && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 0 0' }}>
-              <button
-                onClick={handleHome}
-                style={{
-                  fontSize: 13, fontWeight: 600, color: 'var(--neon-blue)',
-                  background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.25)',
-                  borderRadius: 10, padding: '7px 16px', cursor: 'pointer',
-                }}
-              >← Back to Setup</button>
-            </div>
-            <GroupView groups={groups} onGroupsUpdate={handleGroupsUpdate} />
-          </div>
+          // Passing down handleHome to the integrated toolbar inside GroupView
+          <GroupView groups={groups} onGroupsUpdate={handleGroupsUpdate} onBack={handleHome} />
         )}
       </main>
       <Footer />

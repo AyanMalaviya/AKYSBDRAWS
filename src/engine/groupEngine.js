@@ -1,25 +1,5 @@
 // ── Group Draw Engine ──
-// Players are tagged A (strong), B (average), C (weak).
-//
-// GROUPING RULES:
-//   1. Shuffle players within each tag randomly.
-//   2. Slice into full groups of `groupSize` per tag.
-//   3. Remainders (< groupSize players left over after all groups formed) are redistributed:
-//
-//      PRIORITY ORDER per remainder tag:
-//        1st → append to last group of the SAME tag  (if any same-tag groups exist)
-//        2nd → append to last group of the NEXT tier  (A→B, B→C, C→C)
-//        3rd → form their own standalone group
-//
-//      Example: 3A + 3B + 3C + 1 extra B  → 1B remainder goes to last B group (same-tag rule)
-//      Example: 1B remainder, no B groups, C groups exist → goes to last C group
-//      Example: 1B remainder, no B/C groups → own standalone group
-//
-// WITHIN EACH GROUP:
-//   Full round-robin. Win = 3 pts, Draw = 1 pt each, Loss = 0 pts.
-//   Group winner = most points (tie-break: most wins).
-
-const uid = () => Math.random().toString(36).slice(2, 8)
+export const uid = () => Math.random().toString(36).slice(2, 8)
 
 const shuffle = arr => {
   const a = [...arr]
@@ -35,31 +15,66 @@ export const TAG_META = {
   C: { label: 'Weak',    color: '#34d399', glow: 'rgba(52,211,153,0.6)',  badge: 'tag-green'  },
 }
 
-// Build round-robin matches for an array of players
 function makeRoundRobin(players, groupId) {
   const matches = []
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
-      matches.push({
-        id: uid(),
-        groupId,
-        p1: players[i],
-        p2: players[j],
-        winner: null,
-      })
+      matches.push({ id: uid(), groupId, p1: players[i], p2: players[j], winner: null })
     }
   }
   return matches
 }
 
-function makeStandings(players) {
-  return players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
+// ── SMART MATCH RECOMPUTATION ── //
+// Preserves existing match scores when the roster changes, 
+// adds new required matches, and purges obsolete ones.
+export function recomputeGroup(g) {
+  // 1. Generate what the ideal match schedule SHOULD look like right now
+  const idealMatches = makeRoundRobin(g.players, g.id)
+  const oldMatches = g.matches || []
+
+  // 2. Map old results onto the new ideal schedule if they still exist
+  const newMatches = idealMatches.map(ideal => {
+    const existing = oldMatches.find(m => 
+      (m.p1.id === ideal.p1.id && m.p2.id === ideal.p2.id) ||
+      (m.p1.id === ideal.p2.id && m.p2.id === ideal.p1.id)
+    )
+    if (existing) {
+      // Keep old score, but sync names/tags in case they were edited
+      return {
+        ...existing,
+        p1: g.players.find(p => p.id === existing.p1.id) || existing.p1,
+        p2: g.players.find(p => p.id === existing.p2.id) || existing.p2,
+        winner: existing.winner === 'draw' ? 'draw' : (existing.winner ? g.players.find(p => p.id === existing.winner.id) : null)
+      }
+    }
+    return ideal // This is a brand new match for a newly added player
+  })
+
+  // 3. Recalculate standings strictly from the surviving matches
+  const standings = g.players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
+  newMatches.forEach(m => {
+    if (!m.winner) return
+    const p1s = standings.find(s => s.id === m.p1.id)
+    const p2s = standings.find(s => s.id === m.p2.id)
+    if (!p1s || !p2s) return
+    
+    if (m.winner === 'draw') {
+      p1s.draws++; p1s.points++; p1s.played++
+      p2s.draws++; p2s.points++; p2s.played++
+    } else if (m.winner?.id === m.p1.id) {
+      p1s.wins++; p1s.points += 3; p1s.played++
+      p2s.losses++; p2s.played++
+    } else if (m.winner?.id === m.p2.id) {
+      p2s.wins++; p2s.points += 3; p2s.played++
+      p1s.losses++; p1s.played++
+    }
+  })
+  standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
+
+  return { ...g, matches: newMatches, standings }
 }
 
-/**
- * Compute the winner of a group from its standings.
- * Returns null if matches are still in progress or none played.
- */
 export function getGroupWinner(group) {
   const played = group.standings.filter(s => s.played > 0)
   if (played.length === 0) return null
@@ -69,30 +84,8 @@ export function getGroupWinner(group) {
   return sorted[0]
 }
 
-// Append remainder players to the last group in a given tag bucket.
-// Returns true if successful, false if that bucket is empty.
-function appendToLastGroup(groupsByTag, tag, players) {
-  const arr = groupsByTag[tag]
-  if (!arr || arr.length === 0) return false
-  arr[arr.length - 1] = [...arr[arr.length - 1], ...players]
-  return true
-}
-
-/**
- * generateGroups(players, groupSize)
- *  players   : [{ id, name, tag }]  — tag must be 'A' | 'B' | 'C'
- *  groupSize : number  — target players per group (≥ 2)
- *
- * Remainder redistribution (applied AFTER all tags are fully sliced):
- *   For each tag T with remainders:
- *     1. Same-tag groups exist?  → append to last group of T
- *     2. Next-tier groups exist? → append to last group of next tier (A→B, B→C, C→C)
- *     3. Neither?                → push as own standalone group under T
- *
- * Returns: [{ id, tag, name, mixed, players, matches, standings }]
- */
 export function generateGroups(players, groupSize) {
-  // 1. Bucket & shuffle by tag
+  const numGroups = Math.max(1, Math.ceil(players.length / groupSize))
   const byTag = { A: [], B: [], C: [] }
   players.forEach(p => {
     const t = (p.tag || 'B').toUpperCase()
@@ -100,98 +93,80 @@ export function generateGroups(players, groupSize) {
     byTag[t].push(p)
   })
 
-  // 2. Build full groups per tag, collect remainders
-  const groupsByTag = { A: [], B: [], C: [] }
-  const remainders  = { A: [], B: [], C: [] }
+  const orderedPlayers = [
+    ...shuffle(byTag.A || []),
+    ...shuffle(byTag.B || []),
+    ...shuffle(byTag.C || [])
+  ]
 
-  ;['A', 'B', 'C'].forEach(tag => {
-    const shuffled   = shuffle(byTag[tag] || [])
-    const fullGroups = Math.floor(shuffled.length / groupSize)
-    for (let i = 0; i < fullGroups; i++) {
-      groupsByTag[tag].push(shuffled.slice(i * groupSize, (i + 1) * groupSize))
-    }
-    const rem = shuffled.length % groupSize
-    if (rem > 0) remainders[tag] = shuffled.slice(fullGroups * groupSize)
-  })
+  const groups = Array.from({ length: numGroups }, (_, i) => ({
+    id: `G${i + 1}`,
+    name: `Group ${i + 1}`,
+    players: []
+  }))
 
-  // 3. Redistribute remainders — ALL tags fully sliced first, THEN redistribute.
-  //    This guarantees the same-tag check reflects reality (e.g. 3B+1B gives a B group).
+  orderedPlayers.forEach((p, i) => groups[i % numGroups].players.push(p))
 
-  // A remainders: A same-tag → B next-tier → standalone A
-  if (remainders.A.length > 0) {
-    if (!appendToLastGroup(groupsByTag, 'A', remainders.A))
-      if (!appendToLastGroup(groupsByTag, 'B', remainders.A))
-        groupsByTag.A.push(remainders.A)
-  }
-
-  // B remainders: B same-tag → C next-tier → standalone B
-  if (remainders.B.length > 0) {
-    if (!appendToLastGroup(groupsByTag, 'B', remainders.B))
-      if (!appendToLastGroup(groupsByTag, 'C', remainders.B))
-        groupsByTag.B.push(remainders.B)
-  }
-
-  // C remainders: C same-tag → standalone C (no further tier)
-  if (remainders.C.length > 0) {
-    if (!appendToLastGroup(groupsByTag, 'C', remainders.C))
-      groupsByTag.C.push(remainders.C)
-  }
-
-  // 4. Flatten into final group objects
-  const groups = []
-  let groupNum = 1
-
-  ;['A', 'B', 'C'].forEach(tag => {
-    groupsByTag[tag].forEach(playerSlice => {
-      if (playerSlice.length === 0) return
-      const id = `G${groupNum}`
-      const tags  = [...new Set(playerSlice.map(p => (p.tag || 'B').toUpperCase()))]
-      const mixed = tags.length > 1
-      const nameLabel = mixed
-        ? `Group ${id} (${TAG_META[tag].label} +mixed)`
-        : `Group ${id} (${TAG_META[tag].label})`
-
-      groups.push({
-        id,
-        tag,
-        name: nameLabel,
-        mixed,
-        players: playerSlice,
-        matches: makeRoundRobin(playerSlice, id),
-        standings: makeStandings(playerSlice),
-      })
-      groupNum++
-    })
-  })
-
-  return groups
+  // Route them through our new smart function to hydrate matches/standings
+  return groups.map(g => recomputeGroup(g))
 }
 
-// Record a match result and recompute standings from scratch
 export function recordGroupResult(groups, groupId, matchId, winner) {
   return groups.map(g => {
     if (g.id !== groupId) return g
     const matches = g.matches.map(m => m.id !== matchId ? m : { ...m, winner })
-
-    const standings = g.players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
-    matches.forEach(m => {
-      if (!m.winner) return
-      const p1s = standings.find(s => s.id === m.p1.id)
-      const p2s = standings.find(s => s.id === m.p2.id)
-      if (!p1s || !p2s) return
-      if (m.winner === 'draw') {
-        p1s.draws++; p1s.points++; p1s.played++
-        p2s.draws++; p2s.points++; p2s.played++
-      } else if (m.winner.id === m.p1.id) {
-        p1s.wins++; p1s.points += 3; p1s.played++
-        p2s.losses++; p2s.played++
-      } else {
-        p2s.wins++; p2s.points += 3; p2s.played++
-        p1s.losses++; p1s.played++
-      }
-    })
-    standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
-
-    return { ...g, matches, standings }
+    // Recompute utilizing the same match arrays
+    return recomputeGroup({ ...g, matches }) 
   })
+}
+
+// ── EDIT MODE MUTATION HELPERS ── //
+
+export function renameGroup(groups, groupId, newName) {
+  return groups.map(g => g.id === groupId ? { ...g, name: newName } : g)
+}
+
+export function addPlayerToGroup(groups, groupId) {
+  return groups.map(g => {
+    if (g.id !== groupId) return g
+    const newPlayer = { id: `p_${uid()}`, name: `New Player`, tag: 'C' }
+    return recomputeGroup({ ...g, players: [...g.players, newPlayer] })
+  })
+}
+
+export function removePlayerFromGroup(groups, groupId, playerId) {
+  return groups.map(g => {
+    if (g.id !== groupId) return g
+    return recomputeGroup({ ...g, players: g.players.filter(p => p.id !== playerId) })
+  })
+}
+
+export function movePlayerBetweenGroups(groups, fromGroupId, toGroupId, playerId) {
+  let player = null
+  for (const g of groups) if (g.id === fromGroupId) player = g.players.find(p => p.id === playerId)
+  if (!player || fromGroupId === toGroupId) return groups
+
+  return groups.map(g => {
+    if (g.id === fromGroupId) return recomputeGroup({ ...g, players: g.players.filter(p => p.id !== playerId) })
+    if (g.id === toGroupId) return recomputeGroup({ ...g, players: [...g.players, player] })
+    return g
+  })
+}
+
+export function updatePlayerProps(groups, groupId, playerId, updates) {
+  return groups.map(g => {
+    if (g.id !== groupId) return g
+    const newPlayers = g.players.map(p => p.id === playerId ? { ...p, ...updates } : p)
+    return recomputeGroup({ ...g, players: newPlayers })
+  })
+}
+
+export function createNewGroup(groups) {
+  const nextId = groups.length > 0 ? Math.max(...groups.map(g => parseInt(g.id.replace('G', '')) || 0)) + 1 : 1
+  return [...groups, recomputeGroup({
+    id: `G${nextId}`,
+    name: `Group ${nextId}`,
+    players: [],
+    matches: []
+  })]
 }
