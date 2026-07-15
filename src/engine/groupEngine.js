@@ -25,40 +25,35 @@ function makeRoundRobin(players, groupId) {
   return matches
 }
 
-// ── SMART MATCH RECOMPUTATION ── //
-// Preserves existing match scores when the roster changes, 
+// ── SMART MATCH RECOMPUTATION ──
+// Preserves existing match scores when the roster changes,
 // adds new required matches, and purges obsolete ones.
 export function recomputeGroup(g) {
-  // 1. Generate what the ideal match schedule SHOULD look like right now
   const idealMatches = makeRoundRobin(g.players, g.id)
   const oldMatches = g.matches || []
 
-  // 2. Map old results onto the new ideal schedule if they still exist
   const newMatches = idealMatches.map(ideal => {
-    const existing = oldMatches.find(m => 
+    const existing = oldMatches.find(m =>
       (m.p1.id === ideal.p1.id && m.p2.id === ideal.p2.id) ||
       (m.p1.id === ideal.p2.id && m.p2.id === ideal.p1.id)
     )
     if (existing) {
-      // Keep old score, but sync names/tags in case they were edited
       return {
         ...existing,
         p1: g.players.find(p => p.id === existing.p1.id) || existing.p1,
         p2: g.players.find(p => p.id === existing.p2.id) || existing.p2,
-        winner: existing.winner === 'draw' ? 'draw' : (existing.winner ? g.players.find(p => p.id === existing.winner.id) : null)
+        winner: existing.winner === 'draw' ? 'draw' : (existing.winner ? g.players.find(p => p.id === existing.winner.id) || null : null)
       }
     }
-    return ideal // This is a brand new match for a newly added player
+    return ideal
   })
 
-  // 3. Recalculate standings strictly from the surviving matches
   const standings = g.players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
   newMatches.forEach(m => {
     if (!m.winner) return
     const p1s = standings.find(s => s.id === m.p1.id)
     const p2s = standings.find(s => s.id === m.p2.id)
     if (!p1s || !p2s) return
-    
     if (m.winner === 'draw') {
       p1s.draws++; p1s.points++; p1s.played++
       p2s.draws++; p2s.points++; p2s.played++
@@ -76,12 +71,18 @@ export function recomputeGroup(g) {
 }
 
 export function getGroupWinner(group) {
-  const played = group.standings.filter(s => s.played > 0)
-  if (played.length === 0) return null
-  const allDone = group.matches.every(m => m.winner !== null)
+  const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return null
   const sorted = [...group.standings].sort((a, b) => b.points - a.points || b.wins - a.wins)
-  return sorted[0]
+  return sorted[0] || null
+}
+
+// Returns top N advancers. If tied for the last spot, returns all tied players (caller resolves).
+export function getGroupAdvancers(group, count = 2) {
+  const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
+  if (!allDone) return []
+  const sorted = [...group.standings].sort((a, b) => b.points - a.points || b.wins - a.wins)
+  return sorted.slice(0, Math.min(count, sorted.length))
 }
 
 export function generateGroups(players, groupSize) {
@@ -105,9 +106,9 @@ export function generateGroups(players, groupSize) {
     players: []
   }))
 
+  // Snake-draft distribution: A→G1,G2,G3…  B→G1,G2,G3…  C→G1,G2,G3…
   orderedPlayers.forEach((p, i) => groups[i % numGroups].players.push(p))
 
-  // Route them through our new smart function to hydrate matches/standings
   return groups.map(g => recomputeGroup(g))
 }
 
@@ -115,12 +116,11 @@ export function recordGroupResult(groups, groupId, matchId, winner) {
   return groups.map(g => {
     if (g.id !== groupId) return g
     const matches = g.matches.map(m => m.id !== matchId ? m : { ...m, winner })
-    // Recompute utilizing the same match arrays
-    return recomputeGroup({ ...g, matches }) 
+    return recomputeGroup({ ...g, matches })
   })
 }
 
-// ── EDIT MODE MUTATION HELPERS ── //
+// ── EDIT MODE MUTATION HELPERS ──
 
 export function renameGroup(groups, groupId, newName) {
   return groups.map(g => g.id === groupId ? { ...g, name: newName } : g)
@@ -141,14 +141,16 @@ export function removePlayerFromGroup(groups, groupId, playerId) {
   })
 }
 
-export function movePlayerBetweenGroups(groups, fromGroupId, toGroupId, playerId) {
+// BUG FIX: was (groups, groupId, toGroupId, playerId) — args were swapped at call site.
+// Canonical signature: (groups, fromGroupId, playerId, toGroupId)
+export function movePlayerBetweenGroups(groups, fromGroupId, playerId, toGroupId) {
   let player = null
   for (const g of groups) if (g.id === fromGroupId) player = g.players.find(p => p.id === playerId)
   if (!player || fromGroupId === toGroupId) return groups
 
   return groups.map(g => {
     if (g.id === fromGroupId) return recomputeGroup({ ...g, players: g.players.filter(p => p.id !== playerId) })
-    if (g.id === toGroupId) return recomputeGroup({ ...g, players: [...g.players, player] })
+    if (g.id === toGroupId)   return recomputeGroup({ ...g, players: [...g.players, player] })
     return g
   })
 }
@@ -162,11 +164,18 @@ export function updatePlayerProps(groups, groupId, playerId, updates) {
 }
 
 export function createNewGroup(groups) {
-  const nextId = groups.length > 0 ? Math.max(...groups.map(g => parseInt(g.id.replace('G', '')) || 0)) + 1 : 1
+  const nextId = groups.length > 0
+    ? Math.max(...groups.map(g => parseInt(g.id.replace('G', '')) || 0)) + 1
+    : 1
   return [...groups, recomputeGroup({
     id: `G${nextId}`,
     name: `Group ${nextId}`,
     players: [],
     matches: []
   })]
+}
+
+// NEW: Delete a group entirely (only allowed in edit/draft mode)
+export function deleteGroup(groups, groupId) {
+  return groups.filter(g => g.id !== groupId)
 }
