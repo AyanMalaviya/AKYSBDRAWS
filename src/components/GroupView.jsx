@@ -273,13 +273,18 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
 // ─────────────────────────────────────────
 // Main GroupView
 // ─────────────────────────────────────────
-export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToRound2 }) {
+// BUG FIX #4: eliminatedIds lifted to persist through parent re-renders.
+// Caller must pass `eliminatedIds` + `onEliminate` or the component manages them locally.
+export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToRound2, eliminatedIds: externalEliminatedIds, onEliminate: externalOnEliminate }) {
   const [isEditing, setIsEditing]     = useState(false)
   const [draftGroups, setDraftGroups] = useState(null)
-  const [eliminatedIds, setEliminatedIds] = useState([])
-  const [confirmed, setConfirmed]     = useState(false)
+  // BUG FIX #4: use external state if provided, otherwise manage locally
+  const [localEliminatedIds, setLocalEliminatedIds] = useState([])
+  const eliminatedIds = externalEliminatedIds ?? localEliminatedIds
+  const handleEliminate = externalOnEliminate ?? ((id) => setLocalEliminatedIds(prev => [...prev, id]))
 
-  // Ref for the horizontal-scroll grid container
+  const [confirmed, setConfirmed] = useState(false)
+
   const gridRef = useRef(null)
 
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
@@ -313,26 +318,26 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToR
     if (action === 'delete_group')  next = deleteGroup(next, groupId)
     setDraftGroups(next)
   }
-  const handleCreateGroup  = () => setDraftGroups(createNewGroup(draftGroups))
-  const handleEliminate    = (playerId) => setEliminatedIds(prev => [...prev, playerId])
+  const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
 
-  // ── Scroll helpers (mobile) ──
   const SCROLL_AMOUNT = 360
   const scrollLeft  = () => gridRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' })
   const scrollRight = () => gridRef.current?.scrollBy({ left:  SCROLL_AMOUNT, behavior: 'smooth' })
 
-  // ── Advance logic ──
   const allGroupsDone = !isEditing && groups.every(
     g => g.matches.every(m => m.winner !== null) && g.matches.length > 0
   )
 
+  // BUG FIX #3: attach advanceTag to each advancer before passing to Round 2
   const groupAdvancerData = useMemo(() => {
     if (!allGroupsDone) return []
     return groups.map(g => {
       const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(g)
       const remainingTied = tied.filter(p => !eliminatedIds.includes(p.id))
       const tieResolved   = needsTieBreak && remainingTied.length === 1
-      const finalAdvancers = tieResolved ? [...advancers, remainingTied[0]] : advancers
+      // Winner gets advanceTag 'A', runner-up gets 'B'
+      const rawAdvancers  = tieResolved ? [...advancers, remainingTied[0]] : advancers
+      const finalAdvancers = rawAdvancers.map((p, i) => ({ ...p, advanceTag: i === 0 ? 'A' : 'B' }))
       return { groupId: g.id, groupName: g.name, advancers: finalAdvancers, needsTieBreak, tieResolved }
     })
   }, [allGroupsDone, groups, eliminatedIds])
@@ -398,7 +403,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToR
               </div>
             ) : (
               <>
-                <div className="gv-summary-subtitle">Top 2 advancing from each group:</div>
+                <div className="gv-summary-subtitle">Advancing from each group:</div>
                 <div className="gv-summary-list">
                   {groupAdvancerData.map(d => (
                     <div key={d.groupId} className="gv-summary-group-block">
@@ -413,23 +418,25 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToR
                     </div>
                   ))}
                 </div>
-                {!confirmed ? (
-                  <button className="gv-confirm-btn" onClick={() => setConfirmed(true)}>
-                    ✓ Confirm Advancing Players
-                  </button>
-                ) : (
-                  <motion.div
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 16 }}
-                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                  >
-                    <div style={{ color: 'var(--neon-green)', fontSize: 13, fontWeight: 600 }}>✅ {allAdvancers.length} players confirmed</div>
-                    <button
-                      className="gv-advance-btn"
-                      onClick={() => onAdvanceToRound2 && onAdvanceToRound2(allAdvancers)}
-                    >
-                      Round 2 →
+                {onAdvanceToRound2 && (
+                  !confirmed ? (
+                    <button className="gv-confirm-btn" onClick={() => setConfirmed(true)}>
+                      ✓ Confirm Advancing Players
                     </button>
-                  </motion.div>
+                  ) : (
+                    <motion.div
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 16 }}
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <div style={{ color: 'var(--neon-green)', fontSize: 13, fontWeight: 600 }}>✅ {allAdvancers.length} players confirmed</div>
+                      <button
+                        className="gv-advance-btn"
+                        onClick={() => onAdvanceToRound2(allAdvancers)}
+                      >
+                        Round 2 →
+                      </button>
+                    </motion.div>
+                  )
                 )}
               </>
             )}
@@ -447,10 +454,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToR
       )}
 
       {/* ── Groups grid ── */}
-      <div
-        ref={gridRef}
-        className="tag-groups-grid"
-      >
+      <div ref={gridRef} className="tag-groups-grid">
         {activeGroups.map(g => (
           <GroupCard
             key={g.id}

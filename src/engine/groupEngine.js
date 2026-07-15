@@ -63,26 +63,32 @@ export function recomputeGroup(g) {
       p1s.losses++; p1s.played++
     }
   })
+  // BUG FIX #7: sort once here — callers reuse this already-sorted array
   standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
   return { ...g, matches: newMatches, standings }
 }
 
+// BUG FIX #7: reuse standings already sorted by recomputeGroup
 export function getGroupWinner(group) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return null
-  return [...group.standings].sort((a, b) => b.points - a.points || b.wins - a.wins)[0] || null
+  return group.standings[0] || null
 }
 
 /**
  * Returns advancer info for a completed group.
+ * BUG FIX #8: 2-player groups only have 1 advancer (the winner), not both.
  * Tie is detected when rank-2 and rank-3 share equal points AND equal wins.
  */
 export function getGroupAdvancerInfo(group) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return { advancers: [], tied: [], needsTieBreak: false }
 
-  const sorted = [...group.standings].sort((a, b) => b.points - a.points || b.wins - a.wins)
-  if (sorted.length <= 2) return { advancers: sorted, tied: [], needsTieBreak: false }
+  const sorted = group.standings // already sorted by recomputeGroup
+
+  // BUG FIX #8: 2-player group — only the winner advances
+  if (sorted.length <= 1) return { advancers: sorted, tied: [], needsTieBreak: false }
+  if (sorted.length === 2) return { advancers: [sorted[0]], tied: [], needsTieBreak: false }
 
   const rank2 = sorted[1]
   const rank3 = sorted[2]
@@ -103,23 +109,9 @@ export function getGroupAdvancers(group, count = 2) {
 
 // ──────────────────────────────────────────────────
 // Cross-tag group generation (Round 2 / Knockout stages)
-//
-// Rule: Within each new group, match A players from one source-group
-// against B players from the NEXT source-group (circular).
-// i.e. A(G1) vs B(G2), A(G2) vs B(G3), …, A(Gn) vs B(G1)
-//
-// Algorithm:
-// 1. Collect winners (rank 1) and runners-up (rank 2) per source group.
-//    Winners carry the tag of their source-group rank: "A" for winners, "B" for runners-up.
-// 2. Sort each list by the original tag priority (stronger players first).
-// 3. Snake-draft into new groups (same as generateGroups).
-// 4. Inside each new group build matches so that:
-//    • A-tagged players DON’T face each other first — they face B-tagged players first.
-//    • Only when no B opponent is left does an A face another A.
 // ──────────────────────────────────────────────────
 
 function makeCrossTagMatches(players, groupId) {
-  // Separate into A (winners) and B (runners-up) pools
   const poolA = shuffle(players.filter(p => (p.advanceTag || p.tag) === 'A'))
   const poolB = shuffle(players.filter(p => (p.advanceTag || p.tag) === 'B'))
   const rest  = players.filter(p => !['A','B'].includes(p.advanceTag || p.tag))
@@ -127,7 +119,6 @@ function makeCrossTagMatches(players, groupId) {
   const matches = []
   const paired  = new Set()
 
-  // Step 1: pair each A with a B (cross-tag, circular over pool length)
   poolA.forEach((a, i) => {
     const b = poolB[i % poolB.length]
     if (b) {
@@ -137,7 +128,6 @@ function makeCrossTagMatches(players, groupId) {
     }
   })
 
-  // Step 2: any unpaired B players face each other
   const unpaired = [...poolA, ...poolB, ...rest].filter(p => !paired.has(p.id))
   for (let i = 0; i < unpaired.length; i++) {
     for (let j = i + 1; j < unpaired.length; j++) {
@@ -145,8 +135,7 @@ function makeCrossTagMatches(players, groupId) {
     }
   }
 
-  // Step 3: complete round-robin for any remaining players not yet fully matched
-  // (ensures every player plays everyone in the group)
+  // Complete full round-robin — every player plays everyone
   const allPairs = new Set(matches.map(m => [m.p1.id, m.p2.id].sort().join('|')))
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
@@ -161,19 +150,11 @@ function makeCrossTagMatches(players, groupId) {
   return matches
 }
 
-/**
- * generateCrossTagGroups — used for Round 2 and beyond.
- * advancers: array of players, each with an `advanceTag` property:
- *   'A' = winner (rank 1 from their R1 group)
- *   'B' = runner-up (rank 2)
- * groupSize: target players per group.
- */
 export function generateCrossTagGroups(advancers, groupSize) {
   const numGroups = Math.max(1, Math.ceil(advancers.length / groupSize))
 
-  // Separate winners and runners-up, shuffle each
-  const winners    = shuffle(advancers.filter(p => p.advanceTag === 'A'))
-  const runnersUp  = shuffle(advancers.filter(p => p.advanceTag === 'B'))
+  const winners   = shuffle(advancers.filter(p => p.advanceTag === 'A'))
+  const runnersUp = shuffle(advancers.filter(p => p.advanceTag === 'B'))
 
   // Snake-draft: W1, RU1, W2, RU2, …
   const ordered = []
@@ -191,10 +172,8 @@ export function generateCrossTagGroups(advancers, groupSize) {
     standings: [],
   }))
 
-  // Distribute with snake-draft
   ordered.forEach((p, i) => groups[i % numGroups].players.push(p))
 
-  // Build groups: cross-tag matches first, then full round-robin
   return groups.map(g => {
     const crossMatches = makeCrossTagMatches(g.players, g.id)
     const standings    = g.players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
@@ -202,23 +181,70 @@ export function generateCrossTagGroups(advancers, groupSize) {
   })
 }
 
-// ── Standard group generation (Round 1) ──
+/**
+ * generateGroups — Round 1, tag-aware with proper remainder redistribution.
+ *
+ * BUG FIX #1: Remainder redistribution rule:
+ *   A leftover  → appended to last B group (fallback: last A group)
+ *   B leftover  → appended to last C group (fallback: last B group)
+ *   C leftover  → appended to last C group
+ *
+ * Each tag pool is shuffled (random within tier), then sliced into full groups
+ * of `groupSize`. Remainders are redistributed before round-robin is built.
+ */
 export function generateGroups(players, groupSize) {
-  const numGroups = Math.max(1, Math.ceil(players.length / groupSize))
   const byTag = { A: [], B: [], C: [] }
-  players.forEach(p => { const t = (p.tag || 'B').toUpperCase(); byTag[t] = byTag[t] || []; byTag[t].push(p) })
+  players.forEach(p => {
+    const t = (p.tag || 'B').toUpperCase()
+    ;(byTag[t] = byTag[t] || []).push(p)
+  })
 
-  const orderedPlayers = [
-    ...shuffle(byTag.A || []),
-    ...shuffle(byTag.B || []),
-    ...shuffle(byTag.C || [])
-  ]
+  const shuffledA = shuffle(byTag.A || [])
+  const shuffledB = shuffle(byTag.B || [])
+  const shuffledC = shuffle(byTag.C || [])
 
-  const groups = Array.from({ length: numGroups }, (_, i) => ({
-    id: `G${i + 1}`, name: `Group ${i + 1}`, players: []
-  }))
-  orderedPlayers.forEach((p, i) => groups[i % numGroups].players.push(p))
-  return groups.map(g => recomputeGroup(g))
+  // Slice each tier into full groups of `groupSize`
+  const groupsA = []
+  for (let i = 0; i + groupSize <= shuffledA.length; i += groupSize)
+    groupsA.push(shuffledA.slice(i, i + groupSize))
+  const remainA = shuffledA.slice(groupsA.length * groupSize)
+
+  const groupsB = []
+  for (let i = 0; i + groupSize <= shuffledB.length; i += groupSize)
+    groupsB.push(shuffledB.slice(i, i + groupSize))
+  const remainB = shuffledB.slice(groupsB.length * groupSize)
+
+  const groupsC = []
+  for (let i = 0; i + groupSize <= shuffledC.length; i += groupSize)
+    groupsC.push(shuffledC.slice(i, i + groupSize))
+  const remainC = shuffledC.slice(groupsC.length * groupSize)
+
+  // Redistribute remainders: A→lastB (else lastA), B→lastC (else lastB), C→lastC
+  if (remainA.length > 0) {
+    const target = groupsB.length > 0 ? groupsB : groupsA
+    if (target.length > 0) target[target.length - 1].push(...remainA)
+    else groupsC.push(remainA) // absolute fallback: start a new group
+  }
+  if (remainB.length > 0) {
+    const target = groupsC.length > 0 ? groupsC : groupsB
+    if (target.length > 0) target[target.length - 1].push(...remainB)
+    else groupsC.push(remainB)
+  }
+  if (remainC.length > 0) {
+    if (groupsC.length > 0) groupsC[groupsC.length - 1].push(...remainC)
+    else if (groupsB.length > 0) groupsB[groupsB.length - 1].push(...remainC)
+    else if (groupsA.length > 0) groupsA[groupsA.length - 1].push(...remainC)
+    else groupsC.push(remainC)
+  }
+
+  // If nothing was grouped at all (e.g. only 1 player per tier, groupSize=4)
+  // fall back to a single mixed group
+  const allGroups = [...groupsA, ...groupsB, ...groupsC]
+  if (allGroups.length === 0) return [recomputeGroup({ id: 'G1', name: 'Group 1', players, matches: [] })]
+
+  return allGroups.map((players, i) =>
+    recomputeGroup({ id: `G${i + 1}`, name: `Group ${i + 1}`, players, matches: [] })
+  )
 }
 
 export function recordGroupResult(groups, groupId, matchId, winner) {

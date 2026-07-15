@@ -26,30 +26,29 @@ export function useHistory() {
         playerCount: tournament.players?.length || 0,
         players: tournament.players || [],
         bracket: tournament.bracket,
+        // BUG FIX #6: always persist both groups (round 1) and round2Groups separately
         groups: tournament.groups,
+        round2Groups: tournament.round2Groups,
+        round2Players: tournament.round2Players,
+        round: tournament.round,
         champion: tournament.bracket?.champion || null,
-        // Inherits previous status or defaults to the one provided
-        isArchived: tournament.isArchived !== undefined ? tournament.isArchived : (existing >= 0 ? prev[existing].isArchived : false)
+        isArchived: tournament.isArchived !== undefined
+          ? tournament.isArchived
+          : (existing >= 0 ? prev[existing].isArchived : false)
       }
       if (existing >= 0) {
         const next = [...prev]
         next[existing] = entry
         return next
       }
-      // Increased to 30 to hold a comfortable mix of active and history items
       return [entry, ...prev].slice(0, 30)
     })
   }
 
-  // Used to move an active tournament to the dashboard
-  const archiveEntry = (id) => setHistory(prev => prev.map(e => e.id === id ? { ...e, isArchived: true } : e))
-  
-  const deleteEntry = (id) => setHistory(prev => prev.filter(e => e.id !== id))
-  
-  // Only clear the archived tournaments from dashboard, protect active games
-  const deleteAll = () => setHistory(prev => prev.filter(e => !e.isArchived)) 
-  
-  const restoreEntry = (entry) => entry 
+  const archiveEntry  = (id) => setHistory(prev => prev.map(e => e.id === id ? { ...e, isArchived: true } : e))
+  const deleteEntry   = (id) => setHistory(prev => prev.filter(e => e.id !== id))
+  const deleteAll     = ()   => setHistory(prev => prev.filter(e => !e.isArchived))
+  const restoreEntry  = (entry) => entry
 
   return { history, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry }
 }
