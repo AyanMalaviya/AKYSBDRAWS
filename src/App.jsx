@@ -5,17 +5,16 @@ import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
 import { generateBracket } from './engine/bracketEngine.js'
-import { generateGroups } from './engine/groupEngine.js'
+import { generateGroups, generateCrossTagGroups } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
 export default function App() {
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
   const [groups, setGroups]         = useState(null)
-  // round2Players: confirmed advancers from Round 1 group stage
   const [round2Players, setRound2Players] = useState(null)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const { history, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry } = useHistory()
+  const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
 
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
@@ -32,74 +31,39 @@ export default function App() {
 
   // ── Bracket mode ──
   const handleStart = ({ format, players }) => {
-    const t = {
-      id: Date.now().toString(),
-      format, players,
-      bracket: generateBracket(format, players),
-      isArchived: true
-    }
-    setTournament(t)
-    upsertHistory(t)
-    setGroups(null)
-    setRound2Players(null)
-    setView('bracket')
+    const t = { id: Date.now().toString(), format, players, bracket: generateBracket(format, players), isArchived: true }
+    setTournament(t); upsertHistory(t); setGroups(null); setRound2Players(null); setView('bracket')
   }
-
   const handleBracketUpdate = useCallback((updatedBracket) => {
-    setTournament(prev => {
-      const updated = { ...prev, bracket: updatedBracket }
-      upsertHistory(updated)
-      return updated
-    })
+    setTournament(prev => { const u = { ...prev, bracket: updatedBracket }; upsertHistory(u); return u })
   }, [upsertHistory])
 
-  // ── Group mode (Round 1) ──
+  // ── Group mode ──
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
-    const t = {
-      id: id || Date.now().toString(),
-      type: 'group',
-      title: title || 'Group Draw',
-      players,
-      groupSize,
-      groups: g,
-      isArchived: false
-    }
-    setTournament(t)
-    setGroups(g)
-    setRound2Players(null)
-    upsertHistory(t)
-    setView('groups')
+    const t = { id: id || Date.now().toString(), type: 'group', title: title || 'Group Draw', players, groupSize, groups: g, isArchived: false }
+    setTournament(t); setGroups(g); setRound2Players(null); upsertHistory(t); setView('groups')
   }
-
   const handleGroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
     setTournament(prev => {
       if (!prev) return prev
-      const updated = { ...prev, groups: updatedGroups }
-      upsertHistory(updated)
-      return updated
+      const u = { ...prev, groups: updatedGroups }; upsertHistory(u); return u
     })
   }, [upsertHistory])
 
-  // ── Advance to Round 2 ──
-  // Called when user clicks "Round 2 →" after confirming advancers.
-  // groupSize for R2 = ceil(advancers.length / ceil(advancers.length / 4))
-  // (aim for groups of ~4, same engine)
+  // ── Advance to Round 2 with cross-tag matchmaking ──
+  // advancers already carry `advanceTag`: 'A' = winner, 'B' = runner-up (set in GroupView)
   const handleAdvanceToRound2 = useCallback((advancers) => {
-    const idealGroupSize = Math.max(3, Math.round(advancers.length / Math.max(1, Math.round(advancers.length / 4))))
-    const r2Groups = generateGroups(advancers, idealGroupSize)
+    const idealGroupSize = Math.max(3, Math.round(
+      advancers.length / Math.max(1, Math.round(advancers.length / 4))
+    ))
+    const r2Groups = generateCrossTagGroups(advancers, idealGroupSize)
     setRound2Players(advancers)
     setGroups(r2Groups)
     setTournament(prev => {
-      const updated = {
-        ...prev,
-        round: 2,
-        round2Players: advancers,
-        round2Groups: r2Groups,
-      }
-      upsertHistory(updated)
-      return updated
+      const u = { ...prev, round: 2, round2Players: advancers, round2Groups: r2Groups }
+      upsertHistory(u); return u
     })
     setView('round2')
   }, [upsertHistory])
@@ -109,18 +73,12 @@ export default function App() {
     setTournament(entry)
     if (entry.type === 'group') {
       if (entry.round === 2 && entry.round2Groups) {
-        setGroups(entry.round2Groups)
-        setRound2Players(entry.round2Players || null)
-        setView('round2')
+        setGroups(entry.round2Groups); setRound2Players(entry.round2Players || null); setView('round2')
       } else {
-        setGroups(entry.groups)
-        setRound2Players(null)
-        setView('groups')
+        setGroups(entry.groups); setRound2Players(null); setView('groups')
       }
     } else {
-      setGroups(null)
-      setRound2Players(null)
-      setView('bracket')
+      setGroups(null); setRound2Players(null); setView('bracket')
     }
   }
 
@@ -128,23 +86,17 @@ export default function App() {
     setGroups(updatedGroups)
     setTournament(prev => {
       if (!prev) return prev
-      const updated = { ...prev, round2Groups: updatedGroups }
-      upsertHistory(updated)
-      return updated
+      const u = { ...prev, round2Groups: updatedGroups }; upsertHistory(u); return u
     })
   }, [upsertHistory])
 
-  const handleHome = () => {
-    setTournament(null); setGroups(null); setRound2Players(null); setView('home')
-  }
+  const handleHome = () => { setTournament(null); setGroups(null); setRound2Players(null); setView('home') }
 
   return (
     <div className="app-shell">
       <header className="topnav">
         <div className="topnav-brand" onClick={handleHome}>
-          <img
-            src="/AKYSBLogoCircle.png"
-            alt="AKYSB Logo"
+          <img src="/AKYSBLogoCircle.png" alt="AKYSB Logo"
             style={{ height: 40, width: 40, borderRadius: '50%', boxShadow: '0 0 12px rgba(0,212,255,0.4)' }}
           />
           <div>
@@ -198,7 +150,6 @@ export default function App() {
         )}
         {view === 'round2' && groups && (
           <div>
-            {/* Round 2 banner */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
               background: 'linear-gradient(90deg, rgba(255,215,0,0.08), rgba(0,212,255,0.06))',
@@ -209,11 +160,11 @@ export default function App() {
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 — Round 2</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {round2Players?.length ?? groups.flatMap(g => g.players).length} players · new groups from Round 1 advancers
+                  {round2Players?.length ?? groups.flatMap(g => g.players).length} players · cross-tag matchmaking
                 </div>
               </div>
               <button
-                onClick={() => { setView('groups'); /* go back to R1 view without resetting */ }}
+                onClick={() => setView('groups')}
                 style={{ marginLeft: 'auto', background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--muted)', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
               >← Round 1</button>
             </div>
@@ -221,7 +172,7 @@ export default function App() {
               groups={groups}
               onGroupsUpdate={handleGroupsUpdateRound2}
               onBack={() => setView('groups')}
-              onAdvanceToRound2={null} /* disable further advance for now */
+              onAdvanceToRound2={null}
             />
           </div>
         )}
