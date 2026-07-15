@@ -12,7 +12,7 @@ export default function App() {
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
   const [groups, setGroups]         = useState(null)
-  const [stage2, setStage2]         = useState(null)   // { players, bracket }
+  const [stage2, setStage2]         = useState(null)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
 
@@ -29,7 +29,6 @@ export default function App() {
     if (outcome === 'accepted') setDeferredPrompt(null)
   }
 
-  // ── Bracket mode ──
   const handleStart = ({ format, players }) => {
     const t = { id: Date.now().toString(), format, players, bracket: generateBracket(format, players), isArchived: true }
     setTournament(t); upsertHistory(t); setGroups(null); setStage2(null); setView('bracket')
@@ -38,7 +37,6 @@ export default function App() {
     setTournament(prev => { const u = { ...prev, bracket: updatedBracket }; upsertHistory(u); return u })
   }, [upsertHistory])
 
-  // ── Group mode ──
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
     const t = { id: id || Date.now().toString(), type: 'group', title: title || 'Group Draw', players, groupSize, groups: g, isArchived: false }
@@ -52,15 +50,13 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // ── Advance group winners into a Stage 2 Single-Elimination bracket ──
-  // advancers = one winner object per group, already enriched with W/D/L/pts from standings
+  // advancers = flat array of (winner, runner-up) × N_groups, already enriched with stats
   const handleAdvanceToStage2 = useCallback((advancers) => {
     const bracket = generateSingleElim(advancers)
     const s2 = { players: advancers, bracket }
     setStage2(s2)
     setTournament(prev => {
-      const u = { ...prev, stage2: s2 }
-      upsertHistory(u); return u
+      const u = { ...prev, stage2: s2 }; upsertHistory(u); return u
     })
     setView('stage2')
   }, [upsertHistory])
@@ -75,16 +71,11 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // ── History restore ──
   const handleRestore = (entry) => {
     setTournament(entry)
     if (entry.type === 'group') {
       setGroups(entry.groups || null)
-      if (entry.stage2) {
-        setStage2(entry.stage2)
-        // Restore to whichever view was last active — default to groups so
-        // the user can see group results and navigate forward themselves
-      }
+      setStage2(entry.stage2 || null)
       setView('groups')
     } else {
       setGroups(null); setStage2(null); setView('bracket')
@@ -151,7 +142,6 @@ export default function App() {
         )}
         {view === 'stage2' && stage2 && (
           <div>
-            {/* Stage 2 header banner */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
               background: 'linear-gradient(90deg, rgba(255,215,0,0.08), rgba(0,212,255,0.06))',
@@ -162,7 +152,7 @@ export default function App() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 — Knockout</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {stage2.players.length} players · single elimination · group winners only
+                  {stage2.players.length} players (top 2 per group) · single elimination
                 </div>
               </div>
               <button
@@ -170,8 +160,6 @@ export default function App() {
                 style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--muted)', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
               >← Stage 1 Groups</button>
             </div>
-
-            {/* Reuse BracketView with a synthetic tournament object */}
             <BracketView
               tournament={{
                 id: (tournament?.id || 'stage2') + '_s2',
