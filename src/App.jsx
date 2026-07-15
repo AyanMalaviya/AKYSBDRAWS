@@ -4,21 +4,16 @@ import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
-import { generateBracket } from './engine/bracketEngine.js'
-import { generateGroups, generateCrossTagGroups } from './engine/groupEngine.js'
+import { generateBracket, generateSingleElim } from './engine/bracketEngine.js'
+import { generateGroups } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
 export default function App() {
-  const [view, setView]               = useState('home')
-  const [tournament, setTournament]   = useState(null)
-  const [groups, setGroups]           = useState(null)
-  // BUG FIX #5: keep round1Groups separate so back button restores them correctly
-  const [round1Groups, setRound1Groups] = useState(null)
-  const [round2Players, setRound2Players] = useState(null)
+  const [view, setView]             = useState('home')
+  const [tournament, setTournament] = useState(null)
+  const [groups, setGroups]         = useState(null)
+  const [stage2, setStage2]         = useState(null)   // { players, bracket }
   const [deferredPrompt, setDeferredPrompt] = useState(null)
-  // BUG FIX #4: tie-break eliminated IDs live here (above GroupView) so they survive re-renders
-  const [eliminatedIds, setEliminatedIds]   = useState([])
-  const [r2EliminatedIds, setR2EliminatedIds] = useState([])
   const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
 
   useEffect(() => {
@@ -37,7 +32,7 @@ export default function App() {
   // ── Bracket mode ──
   const handleStart = ({ format, players }) => {
     const t = { id: Date.now().toString(), format, players, bracket: generateBracket(format, players), isArchived: true }
-    setTournament(t); upsertHistory(t); setGroups(null); setRound1Groups(null); setRound2Players(null); setView('bracket')
+    setTournament(t); upsertHistory(t); setGroups(null); setStage2(null); setView('bracket')
   }
   const handleBracketUpdate = useCallback((updatedBracket) => {
     setTournament(prev => { const u = { ...prev, bracket: updatedBracket }; upsertHistory(u); return u })
@@ -47,81 +42,56 @@ export default function App() {
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
     const t = { id: id || Date.now().toString(), type: 'group', title: title || 'Group Draw', players, groupSize, groups: g, isArchived: false }
-    setTournament(t); setGroups(g); setRound1Groups(g); setRound2Players(null)
-    setEliminatedIds([]); setR2EliminatedIds([])
-    upsertHistory(t); setView('groups')
+    setTournament(t); setGroups(g); setStage2(null); upsertHistory(t); setView('groups')
   }
   const handleGroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
-    setRound1Groups(updatedGroups)
     setTournament(prev => {
       if (!prev) return prev
       const u = { ...prev, groups: updatedGroups }; upsertHistory(u); return u
     })
   }, [upsertHistory])
 
-  // ── Advance to Round 2 ──
-  // BUG FIX #3 + #5: advancers already carry advanceTag from GroupView.
-  // Store round1Groups before overwriting groups state.
-  const handleAdvanceToRound2 = useCallback((advancers) => {
-    const idealGroupSize = Math.max(3, Math.round(
-      advancers.length / Math.max(1, Math.round(advancers.length / 4))
-    ))
-    const r2Groups = generateCrossTagGroups(advancers, idealGroupSize)
-    setRound2Players(advancers)
-    setGroups(r2Groups)
-    setR2EliminatedIds([])
+  // ── Advance group winners into a Stage 2 Single-Elimination bracket ──
+  // advancers = one winner object per group, already enriched with W/D/L/pts from standings
+  const handleAdvanceToStage2 = useCallback((advancers) => {
+    const bracket = generateSingleElim(advancers)
+    const s2 = { players: advancers, bracket }
+    setStage2(s2)
     setTournament(prev => {
-      const u = { ...prev, round: 2, round2Players: advancers, round2Groups: r2Groups }
+      const u = { ...prev, stage2: s2 }
       upsertHistory(u); return u
     })
-    setView('round2')
+    setView('stage2')
+  }, [upsertHistory])
+
+  const handleStage2BracketUpdate = useCallback((updatedBracket) => {
+    setStage2(prev => {
+      const s2 = { ...prev, bracket: updatedBracket }
+      setTournament(t => {
+        const u = { ...t, stage2: s2 }; upsertHistory(u); return u
+      })
+      return s2
+    })
   }, [upsertHistory])
 
   // ── History restore ──
   const handleRestore = (entry) => {
     setTournament(entry)
-    setEliminatedIds([])
-    setR2EliminatedIds([])
     if (entry.type === 'group') {
-      if (entry.round === 2 && entry.round2Groups) {
-        // BUG FIX #5: restore both rounds properly
-        setGroups(entry.round2Groups)
-        setRound1Groups(entry.groups || null)
-        setRound2Players(entry.round2Players || null)
-        setView('round2')
-      } else {
-        setGroups(entry.groups)
-        setRound1Groups(entry.groups || null)
-        setRound2Players(null)
-        setView('groups')
+      setGroups(entry.groups || null)
+      if (entry.stage2) {
+        setStage2(entry.stage2)
+        // Restore to whichever view was last active — default to groups so
+        // the user can see group results and navigate forward themselves
       }
+      setView('groups')
     } else {
-      setGroups(null); setRound1Groups(null); setRound2Players(null); setView('bracket')
+      setGroups(null); setStage2(null); setView('bracket')
     }
   }
 
-  const handleGroupsUpdateRound2 = useCallback((updatedGroups) => {
-    setGroups(updatedGroups)
-    setTournament(prev => {
-      if (!prev) return prev
-      // BUG FIX #6: persist round2Groups separately in history, don't clobber groups
-      const u = { ...prev, round2Groups: updatedGroups }; upsertHistory(u); return u
-    })
-  }, [upsertHistory])
-
-  const handleHome = () => {
-    setTournament(null); setGroups(null); setRound1Groups(null)
-    setRound2Players(null); setEliminatedIds([]); setR2EliminatedIds([]); setView('home')
-  }
-
-  // BUG FIX #5: going back from Round 2 restores round1Groups, not the current (R2) groups
-  const handleBackToRound1 = useCallback(() => {
-    if (round1Groups) {
-      setGroups(round1Groups)
-    }
-    setView('groups')
-  }, [round1Groups])
+  const handleHome = () => { setTournament(null); setGroups(null); setStage2(null); setView('home') }
 
   return (
     <div className="app-shell">
@@ -176,39 +146,41 @@ export default function App() {
             groups={groups}
             onGroupsUpdate={handleGroupsUpdate}
             onBack={handleHome}
-            onAdvanceToRound2={handleAdvanceToRound2}
-            eliminatedIds={eliminatedIds}
-            onEliminate={(id) => setEliminatedIds(prev => [...prev, id])}
+            onAdvanceToStage2={handleAdvanceToStage2}
           />
         )}
-        {view === 'round2' && groups && (
+        {view === 'stage2' && stage2 && (
           <div>
+            {/* Stage 2 header banner */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
               background: 'linear-gradient(90deg, rgba(255,215,0,0.08), rgba(0,212,255,0.06))',
               border: '1px solid rgba(255,215,0,0.3)',
-              borderRadius: 12, padding: '12px 20px', marginBottom: 8,
+              borderRadius: 12, padding: '12px 20px', marginBottom: 16,
             }}>
               <span style={{ fontSize: 24 }}>🏅</span>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 — Round 2</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 — Knockout</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {round2Players?.length ?? groups.flatMap(g => g.players).length} players · cross-tag matchmaking
+                  {stage2.players.length} players · single elimination · group winners only
                 </div>
               </div>
-              {/* BUG FIX #5: back button now correctly restores Round 1 groups */}
               <button
-                onClick={handleBackToRound1}
-                style={{ marginLeft: 'auto', background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--muted)', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
-              >← Round 1</button>
+                onClick={() => setView('groups')}
+                style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--muted)', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
+              >← Stage 1 Groups</button>
             </div>
-            <GroupView
-              groups={groups}
-              onGroupsUpdate={handleGroupsUpdateRound2}
-              onBack={handleBackToRound1}
-              onAdvanceToRound2={null}
-              eliminatedIds={r2EliminatedIds}
-              onEliminate={(id) => setR2EliminatedIds(prev => [...prev, id])}
+
+            {/* Reuse BracketView with a synthetic tournament object */}
+            <BracketView
+              tournament={{
+                id: (tournament?.id || 'stage2') + '_s2',
+                format: 'single_elim',
+                players: stage2.players,
+                bracket: stage2.bracket,
+              }}
+              onUpdate={handleStage2BracketUpdate}
+              onReset={handleHome}
             />
           </div>
         )}
