@@ -14,7 +14,6 @@ import {
 } from '../engine/groupEngine.js'
 import '../group.css'
 
-// ─────────────────────────────────────────────────────────
 function MatchRow({ match, onResult }) {
   const isDone = !!match.winner
   return (
@@ -23,17 +22,24 @@ function MatchRow({ match, onResult }) {
         className={`gm-player${match.winner?.id === match.p1.id ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner?.id === match.p1.id ? null : match.p1)}
       >
-        <span style={{ background: TAG_META[match.p1.tag || 'C'].color, width: 8, height: 8, borderRadius: 4, display: 'inline-block', marginRight: 6, flexShrink: 0 }} />
+        <span className={`tag ${TAG_META[match.p1.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
+          {match.p1.tag || 'C'}
+        </span>
         {match.p1.name}
       </button>
+
       <span className="gm-vs">vs</span>
+
       <button
         className={`gm-player${match.winner?.id === match.p2.id ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner?.id === match.p2.id ? null : match.p2)}
       >
-        <span style={{ background: TAG_META[match.p2.tag || 'C'].color, width: 8, height: 8, borderRadius: 4, display: 'inline-block', marginRight: 6, flexShrink: 0 }} />
+        <span className={`tag ${TAG_META[match.p2.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
+          {match.p2.tag || 'C'}
+        </span>
         {match.p2.name}
       </button>
+
       <button
         className={`gm-draw${match.winner === 'draw' ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner === 'draw' ? null : 'draw')}
@@ -42,7 +48,6 @@ function MatchRow({ match, onResult }) {
   )
 }
 
-// ─────────────────────────────────────────────────────────
 function StandingsTable({ standings, advancerIds, tiedIds }) {
   return (
     <table className="gs-table">
@@ -62,10 +67,12 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
             >
               <td>{i + 1}</td>
               <td>
-                {i === 0 && isAdv && <span title="Winner">🥇 </span>}
-                {i === 1 && isAdv && <span title="Runner-up">🥈 </span>}
-                {isTied          && <span title="Tied">⚠️ </span>}
-                <span style={{ color: TAG_META[s.tag || 'C'].color, fontWeight: 900, marginRight: 6 }}>{s.tag}</span>
+                {i === 0 && isAdv && <span title="Winner">🏆 </span>}
+                {i === 1 && isAdv && <span title="Runner-up">⭐ </span>}
+                {isTied          && <span title="Tied">⚖️ </span>}
+                <span className={`tag ${TAG_META[s.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
+                  {s.tag || 'C'}
+                </span>
                 {s.name}
               </td>
               <td>{s.played}</td><td>{s.wins}</td><td>{s.draws}</td><td>{s.losses}</td>
@@ -78,20 +85,19 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
   )
 }
 
-// ─────────────────────────────────────────────────────────
 function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, slot }) {
   const remaining = tiedPlayers.filter(p => !eliminatedIds.includes(p.id))
   const resolved  = remaining.length === 1
   return (
     <motion.div className="tb-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
       <div className="tb-header">
-        <span className="tb-icon">⚠️</span>
+        <span className="tb-icon">⚡</span>
         <div>
-          <div className="tb-title">Tie-breaker — {groupName} ({slot === 1 ? 'Runner-up slot' : '1st place'})</div>
+          <div className="tb-title">Tie-breaker: {groupName} ({slot === 1 ? 'Runner-up slot' : '1st place'})</div>
           <div className="tb-sub">
             {resolved
               ? `✅ ${remaining[0].name} advances as ${slot === 1 ? 'runner-up' : 'winner'}`
-              : `${remaining.length} players tied — tap ✕ to eliminate`}
+              : `${remaining.length} players tied! Tap ❌ to eliminate`}
           </div>
         </div>
       </div>
@@ -99,10 +105,10 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
         <div className="tb-players">
           {remaining.map(p => (
             <div key={p.id} className="tb-player-row">
-              <span style={{ color: TAG_META[p.tag || 'C'].color, fontWeight: 900, marginRight: 6 }}>{p.tag}</span>
+              <span className={`tag ${TAG_META[p.tag || 'C']?.badge || 'tag-blue'}`}>{p.tag || 'C'}</span>
               <span className="tb-player-name">{p.name}</span>
-              <span className="tb-player-pts">{p.points ?? 0}pts · {p.wins ?? 0}W</span>
-              <button className="tb-eliminate-btn" onClick={() => onEliminate(p.id)} title={`Eliminate ${p.name}`}>✕</button>
+              <span className="tb-player-pts">{p.points ?? 0}pts • {p.wins ?? 0}W</span>
+              <button className="tb-eliminate-btn" onClick={() => onEliminate(p.id)} title={`Eliminate ${p.name}`}>❌</button>
             </div>
           ))}
         </div>
@@ -111,9 +117,9 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
   )
 }
 
-// ─────────────────────────────────────────────────────────
 function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, eliminatedIds, onEliminate }) {
   const [showStandings, setShowStandings] = useState(false)
+
   const done    = group.matches.filter(m => m.winner).length
   const total   = group.matches.length
   const pct     = total ? Math.round((done / total) * 100) : 0
@@ -123,12 +129,9 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
     ? getGroupAdvancerInfo(group)
     : { advancers: [], tied: [], needsTieBreak: false }
 
-  // advancers[0] = rank-1 winner, advancers[1] = rank-2 runner-up
-  // needsTieBreak means rank-2 and rank-3 are tied → must eliminate down to 1
   const remainingTied = tied.filter(p => !eliminatedIds.includes(p.id))
   const tieResolved   = needsTieBreak ? remainingTied.length === 1 : true
 
-  // Final advancers: winner always rank-1; runner-up = advancers[1] or tie-break survivor
   const finalWinner    = advancers[0] || null
   const finalRunnerUp  = needsTieBreak
     ? (tieResolved ? remainingTied[0] : null)
@@ -140,13 +143,6 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
   ].filter(Boolean)
 
   const tiedIds = needsTieBreak && !tieResolved ? tied.map(t => t.id) : []
-
-  // Enrich with standing stats for display
-  const enrich = (p) => {
-    if (!p) return null
-    const s = group.standings.find(st => st.id === p.id)
-    return s ? { ...p, ...s } : p
-  }
 
   return (
     <motion.div
@@ -173,6 +169,7 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
             <span className="gc-count">{group.players.length} players</span>
           </div>
         )}
+
         {!isEditing && (
           <>
             <div className="gc-progress-bar">
@@ -187,7 +184,7 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
           {group.players.length === 0 && (
             <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: '12px 0', fontStyle: 'italic' }}>
-              No players — delete this group or add players below.
+              No players. Delete this group or add players below.
             </div>
           )}
           {group.players.map(p => (
@@ -216,7 +213,7 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
                 onClick={() => onEditAction('remove_player', group.id, p.id)}
                 title="Remove Player"
                 style={{ flexShrink: 0, background: 'none', border: 'none', color: 'var(--neon-pink)', cursor: 'pointer', padding: 6, fontSize: 16 }}
-              >✕</button>
+              >✖</button>
             </div>
           ))}
           <button
@@ -226,14 +223,14 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
         </div>
       ) : (
         <>
-          {/* Advancer banner — shown once all matches done */}
           {allDone && (finalWinner || finalRunnerUp) && (
             <motion.div className="gc-winner-banner" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
               <div style={{ width: '100%' }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Advancing to Stage 2</div>
+                
                 {finalWinner && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <span style={{ fontSize: 16 }}>🥇</span>
+                    <span style={{ fontSize: 16 }}>🏆</span>
                     <span style={{ fontWeight: 800, fontSize: 14 }}>{finalWinner.name}</span>
                     <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>
                       {group.standings.find(s=>s.id===finalWinner.id)?.points ?? 0}pts
@@ -242,7 +239,7 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
                 )}
                 {finalRunnerUp && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 16 }}>🥈</span>
+                    <span style={{ fontSize: 16 }}>⭐</span>
                     <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--muted)' }}>{finalRunnerUp.name}</span>
                     <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>
                       {group.standings.find(s=>s.id===finalRunnerUp.id)?.points ?? 0}pts
@@ -250,13 +247,12 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
                   </div>
                 )}
                 {needsTieBreak && !tieResolved && (
-                  <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6, fontWeight: 600 }}>⚠️ Runner-up slot tied — resolve below</div>
+                  <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6, fontWeight: 600 }}>⚠️ Runner-up slot tied. Resolve below</div>
                 )}
               </div>
             </motion.div>
           )}
 
-          {/* Tie-breaker panel — only for the runner-up slot */}
           {allDone && needsTieBreak && (
             <TieBreakerPanel
               groupName={group.name}
@@ -278,8 +274,9 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
           </div>
 
           <button className="gc-standings-toggle" onClick={() => setShowStandings(s => !s)}>
-            {showStandings ? '▲ Hide Standings' : '▼ Standings'}
+            {showStandings ? '▼ Hide Standings' : '▶ Standings'}
           </button>
+
           <AnimatePresence>
             {showStandings && (
               <motion.div
@@ -301,9 +298,6 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
   )
 }
 
-// ─────────────────────────────────────────────────────────
-// Main GroupView
-// ─────────────────────────────────────────────────────────
 export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2 }) {
   const [isEditing, setIsEditing]         = useState(false)
   const [draftGroups, setDraftGroups]     = useState(null)
@@ -318,20 +312,24 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     setIsEditing(true)
     setConfirmed(false)
   }
+
   const handleSaveEdit = () => {
     onGroupsUpdate(draftGroups)
     setIsEditing(false)
     setDraftGroups(null)
     setConfirmed(false)
   }
+
   const handleCancelEdit = () => {
     setIsEditing(false)
     setDraftGroups(null)
   }
+
   const handleUpdateMatch = (groupId, matchId, winner) => {
     onGroupsUpdate(recordGroupResult(groups, groupId, matchId, winner))
     setConfirmed(false)
   }
+
   const handleEditAction = (action, groupId, playerId, payload) => {
     let next = draftGroups
     if (action === 'rename_group')  next = renameGroup(next, groupId, payload)
@@ -342,6 +340,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     if (action === 'delete_group')  next = deleteGroup(next, groupId)
     setDraftGroups(next)
   }
+
   const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
   const handleEliminate   = (playerId) => setEliminatedIds(prev => [...prev, playerId])
 
@@ -353,13 +352,11 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     g => g.matches.every(m => m.winner !== null) && g.matches.length > 0
   )
 
-  // Collect TOP-2 advancers per group: [winner, runner-up]
   const groupAdvancerData = useMemo(() => {
     if (!allGroupsDone) return []
     return groups.map(g => {
       const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(g)
       const winner   = advancers[0] || null
-
       let runnerUp   = null
       let tieResolved = true
 
@@ -371,7 +368,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         runnerUp = advancers[1] || null
       }
 
-      // Enrich with standing stats
       const enrich = (p) => {
         if (!p) return null
         const s = g.standings.find(st => st.id === p.id)
@@ -389,44 +385,71 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     })
   }, [allGroupsDone, groups, eliminatedIds])
 
-  // All groups must have both slots filled before advancing
   const allTiesResolved = allGroupsDone &&
     groupAdvancerData.every(d => d.winner && d.runnerUp)
 
-  // Flat ordered list: all winners first (seeded), then all runners-up
-  // Interleaved so SE bracket pits winner vs runner-up from different groups
+  // PERFECT CROSS-MATCHING LOGIC
+  // Winners sorted: Strong (A) to Weak (C), then by points
+  // RunnersUp sorted: Weak (C) to Strong (A), then ascending points
   const allAdvancers = useMemo(() => {
-    const winners   = groupAdvancerData.map(d => d.winner).filter(Boolean)
-    const runnersUp = groupAdvancerData.map(d => d.runnerUp).filter(Boolean)
-    // Interleave: W1, RU2, W2, RU1, W3, RU4, W4, RU3 … (snake seeding)
-    // Simple interleave: W1, RU1, W2, RU2 — keeps group pairs apart in bracket
-    const out = []
-    for (let i = 0; i < Math.max(winners.length, runnersUp.length); i++) {
-      if (winners[i])   out.push(winners[i])
-      if (runnersUp[i]) out.push(runnersUp[i])
+    let winners = groupAdvancerData.map(d => ({ ...d.winner, groupId: d.groupId })).filter(p => p && p.id);
+    let runnersUp = groupAdvancerData.map(d => ({ ...d.runnerUp, groupId: d.groupId })).filter(p => p && p.id);
+
+    const tagVal = { A: 3, B: 2, C: 1 };
+    
+    // Winners: Strongest first (A -> B -> C), then highest points
+    winners.sort((a, b) => (tagVal[b.tag || 'C'] - tagVal[a.tag || 'C']) || ((b.points || 0) - (a.points || 0)));
+    
+    // Runners Up: Weakest first (C -> B -> A), then lowest points
+    runnersUp.sort((a, b) => (tagVal[a.tag || 'C'] - tagVal[b.tag || 'C']) || ((a.points || 0) - (b.points || 0)));
+
+    const out = [];
+    const N = Math.max(winners.length, runnersUp.length);
+    
+    for (let i = 0; i < N; i++) {
+      let w = winners[i];
+      let ruIdx = -1;
+      
+      // Look for the weakest available runner-up that is NOT from the same group
+      for (let j = 0; j < runnersUp.length; j++) {
+        if (runnersUp[j] && (!w || runnersUp[j].groupId !== w.groupId)) {
+          ruIdx = j;
+          break;
+        }
+      }
+      
+      // Fallback: If all remaining runners-up happen to be from the same group, take the first available
+      if (ruIdx === -1 && runnersUp.length > 0) {
+        ruIdx = 0; 
+      }
+      
+      if (w) out.push(w);
+      if (ruIdx !== -1) {
+        out.push(runnersUp[ruIdx]);
+        runnersUp.splice(ruIdx, 1);
+      }
     }
-    return out
+    
+    return out;
   }, [groupAdvancerData])
 
   return (
     <div className="group-view" style={{ paddingTop: 10 }}>
-
-      {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24, background: 'rgba(0,0,0,0.3)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border2)' }}>
         {!isEditing ? (
           <>
-            <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>← Back to Setup</button>
+            <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
             <button
               onClick={handleStartEdit}
               className="btn btn-sm"
               style={{ padding: '8px 16px', background: 'rgba(0,212,255,0.1)', color: 'var(--neon-blue)', border: '1px solid rgba(0,212,255,0.4)' }}
-            >⚙️ Edit Rosters &amp; Groups</button>
+            >✏️ Edit Rosters &amp; Groups</button>
           </>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--neon-pink)', boxShadow: '0 0 8px var(--neon-pink)' }} />
-              <strong style={{ color: 'var(--text)', fontSize: 14 }}>Draft Mode — changes not saved yet</strong>
+              <strong style={{ color: 'var(--text)', fontSize: 14 }}>Draft Mode - changes not saved yet</strong>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={handleCancelEdit} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px', color: 'var(--muted)' }}>Cancel</button>
@@ -434,7 +457,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                 onClick={handleSaveEdit}
                 className="btn btn-sm"
                 style={{ padding: '8px 16px', background: 'rgba(52,211,153,0.2)', color: 'var(--neon-green)', border: '1px solid var(--neon-green)' }}
-              >✓ Save &amp; Apply Matches</button>
+              >✅ Save &amp; Apply Matches</button>
             </div>
           </>
         )}
@@ -453,11 +476,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         </motion.div>
       )}
 
-      {/* All-groups-done summary + advance button */}
       <AnimatePresence>
         {allGroupsDone && !isEditing && (
           <motion.div className="gv-summary" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="gv-summary-title">🏆 Group Stage Complete</div>
+            <div className="gv-summary-title">🎉 Group Stage Complete</div>
             {!allTiesResolved ? (
               <div className="gv-summary-notice">
                 ⚠️ Some groups still have unresolved runner-up ties. Resolve them in each group first.
@@ -467,20 +489,21 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                 <div className="gv-summary-subtitle">
                   2 players per group advancing to Stage 2 (Knockout) — {allAdvancers.length} total:
                 </div>
+                
                 <div className="gv-summary-list">
                   {groupAdvancerData.map(d => (
                     <div key={d.groupId} className="gv-summary-group-block">
                       <div className="gv-summary-group-name">{d.groupName}</div>
                       {d.winner && (
                         <div className="gv-summary-item">
-                          <span className="gv-summary-pos">🥇</span>
+                          <span className="gv-summary-pos">🏆</span>
                           <span className="gv-summary-name">{d.winner.name}</span>
                           <span className="gv-summary-pts">{d.winner.points ?? 0} pts</span>
                         </div>
                       )}
                       {d.runnerUp && (
                         <div className="gv-summary-item" style={{ opacity: 0.8 }}>
-                          <span className="gv-summary-pos">🥈</span>
+                          <span className="gv-summary-pos">⭐</span>
                           <span className="gv-summary-name">{d.runnerUp.name}</span>
                           <span className="gv-summary-pts">{d.runnerUp.points ?? 0} pts</span>
                         </div>
@@ -488,6 +511,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                     </div>
                   ))}
                 </div>
+
                 {!confirmed ? (
                   <button className="gv-confirm-btn" onClick={() => setConfirmed(true)}>
                     ✓ Confirm {allAdvancers.length} Players
@@ -498,13 +522,13 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                   >
                     <div style={{ color: 'var(--neon-green)', fontSize: 13, fontWeight: 600 }}>
-                      ✅ {allAdvancers.length} players confirmed — ready for knockout
+                      ✅ {allAdvancers.length} players confirmed. Ready for knockout!
                     </div>
                     <button
                       className="gv-advance-btn"
                       onClick={() => onAdvanceToStage2 && onAdvanceToStage2(allAdvancers)}
                     >
-                      Stage 2 — Knockout →
+                      Stage 2 - Knockout 🏆
                     </button>
                   </motion.div>
                 )}
@@ -514,16 +538,14 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         )}
       </AnimatePresence>
 
-      {/* Scroll nav */}
       {activeGroups.length > 2 && (
         <div className="groups-scroll-nav">
-          <button className="scroll-nav-btn" onClick={scrollLeft} aria-label="Scroll left">‹</button>
-          <span className="scroll-nav-hint">{activeGroups.length} groups — swipe or scroll</span>
-          <button className="scroll-nav-btn" onClick={scrollRight} aria-label="Scroll right">›</button>
+          <button className="scroll-nav-btn" onClick={scrollLeft} aria-label="Scroll left">❮</button>
+          <span className="scroll-nav-hint">{activeGroups.length} groups • swipe or scroll</span>
+          <button className="scroll-nav-btn" onClick={scrollRight} aria-label="Scroll right">❯</button>
         </div>
       )}
 
-      {/* Groups grid */}
       <div ref={gridRef} className="tag-groups-grid">
         {activeGroups.map(g => (
           <GroupCard
@@ -537,6 +559,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             onEliminate={handleEliminate}
           />
         ))}
+
         {isEditing && (
           <div
             onClick={handleCreateGroup}

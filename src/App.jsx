@@ -4,7 +4,7 @@ import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
-import { generateBracket, generateSingleElim } from './engine/bracketEngine.js'
+import { generateBracket, generateSingleElim, generateStage2Elim, advanceWinnerStage2Elim } from './engine/bracketEngine.js'
 import { generateGroups } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
@@ -33,6 +33,7 @@ export default function App() {
     const t = { id: Date.now().toString(), format, players, bracket: generateBracket(format, players), isArchived: true }
     setTournament(t); upsertHistory(t); setGroups(null); setStage2(null); setView('bracket')
   }
+
   const handleBracketUpdate = useCallback((updatedBracket) => {
     setTournament(prev => { const u = { ...prev, bracket: updatedBracket }; upsertHistory(u); return u })
   }, [upsertHistory])
@@ -42,6 +43,7 @@ export default function App() {
     const t = { id: id || Date.now().toString(), type: 'group', title: title || 'Group Draw', players, groupSize, groups: g, isArchived: false }
     setTournament(t); setGroups(g); setStage2(null); upsertHistory(t); setView('groups')
   }
+
   const handleGroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
     setTournament(prev => {
@@ -50,9 +52,8 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // advancers = flat array of (winner, runner-up) × N_groups, already enriched with stats
   const handleAdvanceToStage2 = useCallback((advancers) => {
-    const bracket = generateSingleElim(advancers)
+    const bracket = generateStage2Elim(advancers)
     const s2 = { players: advancers, bracket }
     setStage2(s2)
     setTournament(prev => {
@@ -99,7 +100,7 @@ export default function App() {
         <nav className="topnav-nav">
           {deferredPrompt && (
             <button className="nav-pill nav-install-btn" onClick={handleInstallClick}>
-              <span className="hide-mob">↓ Install </span>App
+              <span className="hide-mob">⭐ Install </span>App
             </button>
           )}
           <button className={`nav-pill${view !== 'dashboard' ? ' active' : ''}`} onClick={handleHome}>
@@ -116,6 +117,7 @@ export default function App() {
         {view === 'dashboard' && (
           <Dashboard history={history} onRestore={handleRestore} onDelete={deleteEntry} onDeleteAll={deleteAll} />
         )}
+        
         {view === 'home' && (
           <Setup
             onStart={handleStart}
@@ -129,9 +131,11 @@ export default function App() {
             history={history}
           />
         )}
+        
         {view === 'bracket' && tournament && (
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
+        
         {view === 'groups' && groups && (
           <GroupView
             groups={groups}
@@ -140,6 +144,7 @@ export default function App() {
             onAdvanceToStage2={handleAdvanceToStage2}
           />
         )}
+        
         {view === 'stage2' && stage2 && (
           <div>
             <div style={{
@@ -148,22 +153,47 @@ export default function App() {
               border: '1px solid rgba(255,215,0,0.3)',
               borderRadius: 12, padding: '12px 20px', marginBottom: 16,
             }}>
-              <span style={{ fontSize: 24 }}>🏅</span>
+              <span style={{ fontSize: 24 }}>🏆</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 — Knockout</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--neon-blue)' }}>Stage 2 - Knockout</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {stage2.players.length} players (top 2 per group) · single elimination
+                  {stage2.players.length} players (top 2 per group) - single elimination
                 </div>
               </div>
               <button
                 onClick={() => setView('groups')}
                 style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--muted)', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
-              >← Stage 1 Groups</button>
+              >🔙 Stage 1 Groups</button>
             </div>
+            
+            {/* ODD-PLAYER BYE MODAL */}
+            {stage2.bracket.pendingByeSelection && (
+              <div className="modal-overlay" style={{ zIndex: 1000 }}>
+                <div className="modal-box">
+                  <div className="modal-icon">⭐</div>
+                  <div className="modal-msg" style={{ marginBottom: 16 }}>
+                    <strong>Odd number of players!</strong><br/><br/>
+                    Please select the highest scorer to be given a bye for this stage.
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {stage2.bracket.pendingByeSelection.map(p => (
+                      <button key={p.id} className="btn" onClick={() => {
+                        handleStage2BracketUpdate(
+                          advanceWinnerStage2Elim(stage2.bracket, stage2.bracket.rounds.length - 1, null, null, p.id)
+                        )
+                      }}>
+                        Give Bye to {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <BracketView
               tournament={{
                 id: (tournament?.id || 'stage2') + '_s2',
-                format: 'single_elim',
+                format: 'stage2_elim',
                 players: stage2.players,
                 bracket: stage2.bracket,
               }}
@@ -173,6 +203,7 @@ export default function App() {
           </div>
         )}
       </main>
+
       <Footer />
     </div>
   )

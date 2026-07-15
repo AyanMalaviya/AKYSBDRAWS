@@ -13,17 +13,20 @@ const uid = () => Math.random().toString(36).slice(2, 8)
 const makeMatch = (p1, p2, round, bracket = 'winners') => ({
   id: uid(), round, bracket, p1: p1 || null, p2: p2 || null, winner: null
 })
+
 const nextPow2 = n => Math.pow(2, Math.ceil(Math.log2(n)))
 
-// ══ SINGLE ELIMINATION ══
+/* --- SINGLE ELIMINATION --- */
 export function generateSingleElim(players) {
   const size = nextPow2(players.length)
   const seeded = [...players]
   while (seeded.length < size) seeded.push(null)
+  
   const rounds = []
   let cur = []
   for (let i = 0; i < size; i += 2) cur.push(makeMatch(seeded[i], seeded[i + 1], 1))
   rounds.push(cur)
+  
   let rn = 2, prev = cur
   while (prev.length > 1) {
     const next = []
@@ -48,6 +51,7 @@ export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
     b.champion = null
     return b
   }
+  
   b.rounds[roundIdx][matchIdx].winner = winner
   const nextRound = b.rounds[roundIdx + 1]
   if (nextRound) {
@@ -58,28 +62,93 @@ export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
   return b
 }
 
-// ══ DOUBLE ELIMINATION ══
-//
-// For N=8 players (wRounds has 3 rounds: W-R0=4matches, W-R1=2, W-R2=1):
-//
-//  lRounds[0]: 2 matches  ← W-R0 losers pair up (4 losers → 2 matches)
-//  lRounds[1]: 2 matches  ← W-R1 losers drop as p2 (L-R0 winner becomes p1)
-//  lRounds[2]: 1 match    ← L-R1 winners pair up
-//  lRounds[3]: 1 match    ← W-R2 loser drops as p2 (L-R2 winner becomes p1)
-//  grandFinal             ← wRounds last winner (p1) vs lRounds last winner (p2)
-//
-// Drop-in schedule:
-//   wRoundIdx=0 losers → lRounds[0] as pairs:  lMatchIdx = floor(wMatchIdx/2)
-//   wRoundIdx=1 losers → lRounds[1] as p2:     lMatchIdx = wMatchIdx
-//   wRoundIdx=2 losers → lRounds[3] as p2:     lMatchIdx = 0
-//   general for wRoundIdx>0: lRoundIdx = wRoundIdx*2 - 1
+/* --- STAGE 2 / STAGE 3 CUSTOM ELIMINATION --- */
+export function generateStage2Elim(players) {
+  const rounds = []
+  const cur = []
+  for (let i = 0; i < players.length; i += 2) {
+    cur.push(makeMatch(players[i], players[i + 1] || null, 1, 'stage2'))
+  }
+  rounds.push(cur)
+  return { type: 'stage2_elim', rounds, champion: null, pendingByeSelection: null }
+}
 
+export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, byePlayerId = null) {
+  const b = JSON.parse(JSON.stringify(bracket));
+  
+  // 1. Handle Odd-Player Bye Selection
+  if (byePlayerId) {
+    b.pendingByeSelection = null;
+    let advancing = [...b.rounds[roundIdx].map(m => m.winner)];
+    const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId);
+    const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0];
+    
+    const nextRoundMatches = [];
+    const rn = roundIdx + 2;
+    
+    // Stage 3 Reverse Order Matchmaking (1st vs Last)
+    let left = 0;
+    let right = advancing.length - 1;
+    while (left < right) {
+      nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'));
+      left++;
+      right--;
+    }
+    
+    // Auto-advance the player with a bye by pairing them against null
+    const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2');
+    byeMatch.winner = byePlayer;
+    nextRoundMatches.push(byeMatch);
+    
+    b.rounds.push(nextRoundMatches);
+    return b;
+  }
+
+  // 2. Normal progression & Undo
+  if (winner === null) {
+    b.rounds[roundIdx][matchIdx].winner = null;
+    b.rounds = b.rounds.slice(0, roundIdx + 1);
+    b.champion = null;
+    b.pendingByeSelection = null;
+    return b;
+  }
+  
+  b.rounds[roundIdx][matchIdx].winner = winner;
+  const allDone = b.rounds[roundIdx].every(m => m.winner !== null);
+  
+  // 3. Trigger next round dynamically when current round is completed
+  if (allDone && !b.rounds[roundIdx + 1] && !b.champion) {
+    const winners = b.rounds[roundIdx].map(m => m.winner);
+    
+    if (winners.length === 1) {
+      b.champion = winners[0];
+    } else if (winners.length % 2 !== 0) {
+      b.pendingByeSelection = winners; // Ask the UI for a Bye
+    } else {
+      let advancing = [...winners];
+      const nextRoundMatches = [];
+      const rn = roundIdx + 2;
+      
+      // Reverse Order Matchmaking (1st vs Last)
+      let left = 0;
+      let right = advancing.length - 1;
+      while (left < right) {
+        nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'));
+        left++;
+        right--;
+      }
+      
+      b.rounds.push(nextRoundMatches);
+    }
+  }
+  return b;
+}
+
+/* --- DOUBLE ELIMINATION --- */
 export function generateDoubleElim(players) {
   const size = nextPow2(players.length)
   const seeded = [...players]
   while (seeded.length < size) seeded.push(null)
-
-  // Winners bracket rounds
   const wRounds = []
   let wCur = []
   for (let i = 0; i < size; i += 2) wCur.push(makeMatch(seeded[i], seeded[i + 1], 1, 'winners'))
@@ -90,27 +159,16 @@ export function generateDoubleElim(players) {
     for (let i = 0; i < wPrev.length; i += 2) next.push(makeMatch(null, null, rn, 'winners'))
     wRounds.push(next); wPrev = next; rn++
   }
-
-  // Losers bracket
-  // lRounds[0]:          size/4 matches  (W-R0's 4 losers pair into 2, etc.)
-  // lRounds[1]:          size/4 matches  (W-R1 losers drop in as p2)
-  // lRounds[2]:          size/8 matches  (L-R1 winners pair up)
-  // lRounds[3]:          size/8 matches  (W-R2 losers drop in as p2)
-  // ...
-  // total lRounds = 2*(wRounds.length - 1)
   const wLen = wRounds.length
   const lLen = 2 * (wLen - 1)
   const lRounds = []
-  // lRounds[0] has wRounds[0].length / 2 matches (pairs the W-R0 losers)
   let lCount = Math.max(1, wRounds[0].length / 2)
   for (let i = 0; i < lLen; i++) {
     const matches = []
     for (let j = 0; j < lCount; j++) matches.push(makeMatch(null, null, i + 1, 'losers'))
     lRounds.push(matches)
-    // After every even-indexed round (0,2,4...) halve the count
     if (i % 2 === 1) lCount = Math.max(1, Math.floor(lCount / 2))
   }
-
   const grandFinal = makeMatch(null, null, 99, 'grand_final')
   return { type: 'double_elim', wRounds, lRounds, grandFinal, champion: null }
 }
@@ -120,21 +178,14 @@ export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
   const match = b.wRounds[roundIdx][matchIdx]
   const loser = match.p1?.id === winner?.id ? match.p2 : match.p1
   match.winner = winner
-
-  // Advance winner in W bracket
   const nextW = b.wRounds[roundIdx + 1]
   if (nextW) {
     nextW[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
   } else {
     b.grandFinal.p1 = winner
   }
-
-  // Drop loser into correct L-bracket slot
   if (loser) {
     if (roundIdx === 0) {
-      // W-R0 losers pair up in lRounds[0]: two losers per match
-      // match 0,1 → lRounds[0][0] as p1,p2
-      // match 2,3 → lRounds[0][1] as p1,p2
       const lMatchIdx = Math.floor(matchIdx / 2)
       const lMatch = b.lRounds[0][lMatchIdx]
       if (lMatch) {
@@ -142,8 +193,6 @@ export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
         else if (!lMatch.p2) lMatch.p2 = loser
       }
     } else {
-      // W-Ri (i>0) losers drop into lRounds[i*2 - 1] as p2
-      // p1 will be filled by the L-bracket winner advancing from previous round
       const lRoundIdx = roundIdx * 2 - 1
       const lMatch = b.lRounds[lRoundIdx]?.[matchIdx]
       if (lMatch) {
@@ -157,17 +206,13 @@ export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
 export function advanceLoserDE(bracket, roundIdx, matchIdx, winner) {
   const b = JSON.parse(JSON.stringify(bracket))
   b.lRounds[roundIdx][matchIdx].winner = winner
-
   const nextL = b.lRounds[roundIdx + 1]
   if (nextL) {
-    // Even lRoundIdx → pure L-winner round: pair them up (p1 then p2)
-    // Odd  lRoundIdx → drop-in round: L winner becomes p1, W dropin is p2
-    // In both cases just fill p1 first, then p2
     const nextMatchIdx = Math.floor(matchIdx / 2)
     const targetMatch = nextL[nextMatchIdx] || nextL[0]
     if (targetMatch) {
       if (!targetMatch.p1) targetMatch.p1 = winner
-      else targetMatch.p1 = winner // always fill p1 from L advancement
+      else targetMatch.p1 = winner
     }
   } else {
     b.grandFinal.p2 = winner
@@ -182,7 +227,7 @@ export function advanceGrandFinalDE(bracket, winner) {
   return b
 }
 
-// ══ ROUND ROBIN ══
+/* --- ROUND ROBIN --- */
 export function generateRoundRobin(players) {
   const list = players.length % 2 === 0 ? [...players] : [...players, { name: 'BYE', id: 'bye' }]
   const total = list.length
@@ -226,7 +271,7 @@ export function setDrawRoundRobin(bracket, roundIdx, matchIdx) {
   return b
 }
 
-// ══ SWISS ══
+/* --- SWISS --- */
 export function generateSwiss(players) {
   const totalRounds = Math.ceil(Math.log2(players.length))
   const standings = players.map(p => ({ ...p, points: 0, wins: 0, losses: 0, played: 0, opponents: [] }))
@@ -244,7 +289,7 @@ export function generateBracket(format, players) {
     case 'single_elim': return generateSingleElim(players)
     case 'double_elim': return generateDoubleElim(players)
     case 'round_robin': return generateRoundRobin(players)
-    case 'swiss':       return generateSwiss(players)
+    case 'swiss': return generateSwiss(players)
     default: throw new Error(`Unknown format: ${format}`)
   }
 }

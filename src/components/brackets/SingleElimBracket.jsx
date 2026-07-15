@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import MatchCard from '../MatchCard.jsx'
-import { advanceWinnerSingleElim } from '../../engine/bracketEngine.js'
+import { advanceWinnerSingleElim, advanceWinnerStage2Elim } from '../../engine/bracketEngine.js'
 
 const ROUND_LABELS = ['R64','R32','R16','QF','SF','Final']
 const COL_W   = 200
@@ -13,7 +13,11 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
   const [lines, setLines] = useState([])
 
   const handleWin = (rIdx, mIdx, winner) => {
-    onUpdate(advanceWinnerSingleElim(bracket, rIdx, mIdx, winner))
+    if (bracket.type === 'stage2_elim') {
+      onUpdate(advanceWinnerStage2Elim(bracket, rIdx, mIdx, winner))
+    } else {
+      onUpdate(advanceWinnerSingleElim(bracket, rIdx, mIdx, winner))
+    }
   }
 
   // Draw bezier connectors after paint
@@ -23,14 +27,34 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
     const pRect = container.getBoundingClientRect()
     const newLines = []
     const cols = container.querySelectorAll('.bracket-col')
+    
     cols.forEach((col, rIdx) => {
       const nextCol = cols[rIdx + 1]
       if (!nextCol) return
+      
       const cards = col.querySelectorAll('.match-card')
       const nextCards = nextCol.querySelectorAll('.match-card')
+      const currentRoundMatches = bracket.rounds[rIdx]
+      const nextRoundMatches = bracket.rounds[rIdx + 1]
+
       cards.forEach((card, mIdx) => {
-        const nextCard = nextCards[Math.floor(mIdx / 2)]
+        let nextCard;
+        
+        // Dynamically find where this winner advances to support custom matching
+        if (bracket.type === 'stage2_elim') {
+          const match = currentRoundMatches[mIdx]
+          if (match && match.winner) {
+            const targetDataIdx = nextRoundMatches?.findIndex(
+              nm => nm.p1?.id === match.winner.id || nm.p2?.id === match.winner.id
+            )
+            if (targetDataIdx >= 0) nextCard = nextCards[targetDataIdx]
+          }
+        } else {
+          nextCard = nextCards[Math.floor(mIdx / 2)]
+        }
+
         if (!nextCard) return
+        
         const cR = card.getBoundingClientRect()
         const nR = nextCard.getBoundingClientRect()
         const x1 = cR.right  - pRect.left
@@ -38,6 +62,7 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
         const x2 = nR.left   - pRect.left
         const y2 = nR.top + nR.height / 2 - pRect.top
         const mx = (x1 + x2) / 2
+        
         newLines.push({ key: `${rIdx}-${mIdx}`, x1, y1, x2, y2, mx })
       })
     })
@@ -86,14 +111,8 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
                 display: 'flex',
                 flexDirection: 'column',
                 width: COL_W,
-                // Each subsequent round has double the gap between cards
-                gap: rIdx === 0
-                  ? V_GAP
-                  : Math.pow(2, rIdx) * (CARD_H + V_GAP) - CARD_H,
-                // Offset top so cards vertically center-align with their pair
-                paddingTop: rIdx === 0
-                  ? 0
-                  : (Math.pow(2, rIdx) - 1) * (CARD_H + V_GAP) / 2,
+                gap: bracket.type === 'stage2_elim' ? V_GAP : (rIdx === 0 ? V_GAP : Math.pow(2, rIdx) * (CARD_H + V_GAP) - CARD_H),
+                paddingTop: bracket.type === 'stage2_elim' ? 0 : (rIdx === 0 ? 0 : (Math.pow(2, rIdx) - 1) * (CARD_H + V_GAP) / 2),
               }}
             >
               <div className="bracket-row-label" style={{ marginBottom: 8 }}>
