@@ -16,6 +16,29 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
 
+  // 1. Listen for Phone/Browser Back Button presses
+  useEffect(() => {
+    // Register the first screen when the app loads
+    window.history.replaceState({ view: 'home' }, '');
+
+    // Listen for the browser/device back button
+    const handlePopState = (event) => {
+      if (event.state && event.state.view) {
+        setView(event.state.view); // Go back to the previous view
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // 2. Create a smart navigation function
+  const navigate = useCallback((newView) => {
+    // Push the new screen to the device's history so 'Back' works
+    window.history.pushState({ view: newView }, '');
+    setView(newView);
+  }, []);
+
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
@@ -102,13 +125,13 @@ export default function App() {
         setGroups(entry.groups || null)
         setStage2(entry.stage2 || null)
         // FIX: Explicitly open Stage 2 if requested, otherwise open Groups
-        setView((targetView === 'stage2' && entry.stage2) ? 'stage2' : 'groups')
+        navigate((targetView === 'stage2' && entry.stage2) ? 'stage2' : 'groups')      
       } else {
-        setGroups(null); setStage2(null); setView('bracket')
+        setGroups(null); setStage2(null); navigate('bracket')
       }
     }
 
-  const handleHome = () => { setTournament(null); setGroups(null); setStage2(null); setView('home') }
+  const handleHome = () => { setTournament(null); setGroups(null); setStage2(null); navigate('home') }
 
   return (
     <div className="app-shell">

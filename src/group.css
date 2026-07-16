@@ -4,13 +4,13 @@
 .tag-groups-grid {
   display: grid;
   gap: 20px;
-  padding-bottom: 40px;
+  padding-bottom: 90px;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 
 /* On mobile, switch to a horizontal scroll lane so groups stay full-width */
 @media (max-width: 720px) {
-  .tag-groups-grid {
+.tag-groups-grid {
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     display: flex;
     flex-direction: row;
@@ -18,8 +18,7 @@
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
     gap: 16px;
-    padding-bottom: 16px;
-    /* hide native scrollbar but keep scroll functionality */
+    padding-bottom: 90px;
     scrollbar-width: none;
   }
   .tag-groups-grid::-webkit-scrollbar { display: none; }

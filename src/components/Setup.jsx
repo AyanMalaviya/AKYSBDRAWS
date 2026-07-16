@@ -264,7 +264,11 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                 
                 <div className="formats-grid">
                   {s.groupSetups.map(g => {
-                    const isGenerated = history.some(h => h.id === g.id);
+                    // Extract history data to make the card smart
+                    const tournamentData = history.find(h => h.id === g.id);
+                    const isGenerated = !!tournamentData;
+                    const hasStage2 = tournamentData && tournamentData.stage2;
+                    
                     return (
                     <div key={g.id} className="format-tile"
                           style={{
@@ -277,7 +281,8 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                          }}
                           onClick={() => {
                            if (isGenerated && onOpenGroup) {
-                             onOpenGroup(g.id);
+                             // Clicking the card defaults to Stage 2 if it exists, otherwise Groups
+                             onOpenGroup(g.id, hasStage2 ? 'stage2' : 'groups');
                            } else {
                              set('activeGroupId', g.id);
                            }
@@ -307,25 +312,38 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                           >🗑</button>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
+                      
+                      {/* BOTTOM CARD UI: Compact Side-by-Side Nav Buttons */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto', flexWrap: 'nowrap' }}>
                          {isGenerated ? (
                            <span className="tag tag-green" style={{ fontSize: 10, padding: '4px 8px' }}>🟢 Active</span>
                          ) : (
                            <span className="tag" style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.08)' }}>Draft</span>
                          )}
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                           {/* Add direct Stage 2 navigation button if Stage 2 data exists */}
-                           {isGenerated && history.find(h => h.id === g.id)?.stage2 && (
-                             <button
-                               onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'stage2'); }}
-                               style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 'bold', cursor: 'pointer' }}
-                             >
-                               ▶ Stage 2
-                             </button>
+                         
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                           {isGenerated ? (
+                             <>
+                               <button
+                                 onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'groups'); }}
+                                 style={{ background: 'rgba(0,212,255,0.1)', color: 'var(--neon-blue)', border: '1px solid rgba(0,212,255,0.4)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                               >
+                                 ▶ Stage 1
+                               </button>
+                               {hasStage2 && (
+                                 <button
+                                   onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'stage2'); }}
+                                   style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                 >
+                                   ▶ Stage 2
+                                 </button>
+                               )}
+                             </>
+                           ) : (
+                             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                               Setup Draft ➔
+                             </span>
                            )}
-                           <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
-                             {isGenerated ? 'Open Stage 1 ➔' : 'Setup Draft ➔'}
-                           </span>
                          </div>
                       </div>
                     </div>
@@ -448,7 +466,7 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                     <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                       
-                      {/* NEW: Navigation buttons if tournament is active */}
+                      {/* Navigation buttons if tournament is active */}
                       {isActiveGenerated && (() => {
                         const tournamentData = history.find(h => h.id === activeGroup.id);
                         const hasStage2 = tournamentData && tournamentData.stage2;
