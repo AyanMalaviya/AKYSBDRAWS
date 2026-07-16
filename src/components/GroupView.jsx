@@ -298,10 +298,9 @@ function GroupCard({ group, allGroups, onUpdate, isEditing, onEditAction, elimin
   )
 }
 
-export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2 }) {
+export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2 }) {
   const [isEditing, setIsEditing]         = useState(false)
   const [draftGroups, setDraftGroups]     = useState(null)
-  const [eliminatedIds, setEliminatedIds] = useState([])
   const [confirmed, setConfirmed]         = useState(false)
 
   const gridRef = useRef(null)
@@ -325,8 +324,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     setDraftGroups(null)
   }
 
+  // Clear tie-breakers for a specific group when its match scores are edited
   const handleUpdateMatch = (groupId, matchId, winner) => {
-    onGroupsUpdate(recordGroupResult(groups, groupId, matchId, winner))
+    const clearedGroups = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
+    onGroupsUpdate(recordGroupResult(clearedGroups, groupId, matchId, winner))
     setConfirmed(false)
   }
 
@@ -342,7 +343,17 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   }
 
   const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
-  const handleEliminate   = (playerId) => setEliminatedIds(prev => [...prev, playerId])
+  
+  // Save tie-breaker eliminations directly into the group object so they persist across unmounts!
+  const handleEliminate = (groupId, playerId) => {
+    const nextGroups = groups.map(g => {
+      if (g.id === groupId) {
+        return { ...g, eliminatedIds: [...(g.eliminatedIds || []), playerId] }
+      }
+      return g
+    })
+    onGroupsUpdate(nextGroups)
+  }
 
   const SCROLL_AMOUNT = 360
   const scrollLeft  = () => gridRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' })
@@ -361,7 +372,8 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       let tieResolved = true
 
       if (needsTieBreak) {
-        const remaining = tied.filter(p => !eliminatedIds.includes(p.id))
+        const elims = g.eliminatedIds || []
+        const remaining = tied.filter(p => !elims.includes(p.id))
         tieResolved = remaining.length === 1
         runnerUp    = tieResolved ? remaining[0] : null
       } else {
@@ -383,25 +395,30 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         tieResolved,
       }
     })
-  }, [allGroupsDone, groups, eliminatedIds])
+  }, [allGroupsDone, groups])
 
   const allTiesResolved = allGroupsDone &&
     groupAdvancerData.every(d => d.winner && d.runnerUp)
 
   // PERFECT CROSS-MATCHING LOGIC
-  // Winners sorted: Strong (A) to Weak (C), then by points
-  // RunnersUp sorted: Weak (C) to Strong (A), then ascending points
   const allAdvancers = useMemo(() => {
     let winners = groupAdvancerData.map(d => ({ ...d.winner, groupId: d.groupId })).filter(p => p && p.id);
     let runnersUp = groupAdvancerData.map(d => ({ ...d.runnerUp, groupId: d.groupId })).filter(p => p && p.id);
 
     const tagVal = { A: 3, B: 2, C: 1 };
     
-    // Winners: Strongest first (A -> B -> C), then highest points
-    winners.sort((a, b) => (tagVal[b.tag || 'C'] - tagVal[a.tag || 'C']) || ((b.points || 0) - (a.points || 0)));
+    // Stable Sorts using localeCompare to prevent IDs from randomly swapping positions on unmount!
+    winners.sort((a, b) => 
+      (tagVal[b.tag || 'C'] - tagVal[a.tag || 'C']) || 
+      ((b.points || 0) - (a.points || 0)) || 
+      a.id.localeCompare(b.id)
+    );
     
-    // Runners Up: Weakest first (C -> B -> A), then lowest points
-    runnersUp.sort((a, b) => (tagVal[a.tag || 'C'] - tagVal[b.tag || 'C']) || ((a.points || 0) - (b.points || 0)));
+    runnersUp.sort((a, b) => 
+      (tagVal[a.tag || 'C'] - tagVal[b.tag || 'C']) || 
+      ((a.points || 0) - (b.points || 0)) || 
+      a.id.localeCompare(b.id)
+    );
 
     const out = [];
     const N = Math.max(winners.length, runnersUp.length);
@@ -410,7 +427,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       let w = winners[i];
       let ruIdx = -1;
       
-      // Look for the weakest available runner-up that is NOT from the same group
       for (let j = 0; j < runnersUp.length; j++) {
         if (runnersUp[j] && (!w || runnersUp[j].groupId !== w.groupId)) {
           ruIdx = j;
@@ -418,7 +434,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         }
       }
       
-      // Fallback: If all remaining runners-up happen to be from the same group, take the first available
       if (ruIdx === -1 && runnersUp.length > 0) {
         ruIdx = 0; 
       }
@@ -511,8 +526,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                     </div>
                   ))}
                 </div>
-
-                {!confirmed ? (
+                {(!confirmed && !hasStage2) ? (
                   <button className="gv-confirm-btn" onClick={() => setConfirmed(true)}>
                     ✓ Confirm {allAdvancers.length} Players
                   </button>
@@ -522,13 +536,14 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                   >
                     <div style={{ color: 'var(--neon-green)', fontSize: 13, fontWeight: 600 }}>
-                      ✅ {allAdvancers.length} players confirmed. Ready for knockout!
+                      ✅ {allAdvancers.length} players {hasStage2 ? 'advanced to' : 'confirmed for'} Stage 2.
                     </div>
                     <button
                       className="gv-advance-btn"
                       onClick={() => onAdvanceToStage2 && onAdvanceToStage2(allAdvancers)}
+                      style={hasStage2 ? { background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid var(--neon-yellow)' } : {}}
                     >
-                      Stage 2 - Knockout 🏆
+                      {hasStage2 ? '▶ Open Stage 2 Bracket' : 'Stage 2 - Knockout 🏆'}
                     </button>
                   </motion.div>
                 )}
@@ -555,8 +570,8 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             onUpdate={handleUpdateMatch}
             isEditing={isEditing}
             onEditAction={handleEditAction}
-            eliminatedIds={eliminatedIds}
-            onEliminate={handleEliminate}
+            eliminatedIds={g.eliminatedIds || []}
+            onEliminate={(playerId) => handleEliminate(g.id, playerId)}
           />
         ))}
 

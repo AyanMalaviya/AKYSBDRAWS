@@ -9,6 +9,10 @@ html {
   scroll-behavior: smooth;
 }
 
+#root {
+  padding-bottom: 60px; 
+}
+
 /* ─ Tokens ─────────────────────────────────────────────────── */
 :root {
   --bg:       #050714;

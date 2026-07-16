@@ -35,8 +35,15 @@ export default function App() {
   }
 
   const handleBracketUpdate = useCallback((updatedBracket) => {
-    setTournament(prev => { const u = { ...prev, bracket: updatedBracket }; upsertHistory(u); return u })
-  }, [upsertHistory])
+      setTournament(prev => { 
+        // Check if a winner was selected in the final match
+        const isFinished = !!updatedBracket.champion;
+        const u = { ...prev, bracket: updatedBracket }; 
+        if (isFinished) u.isArchived = true; // Auto-archive!
+        upsertHistory(u); 
+        return u 
+      })
+    }, [upsertHistory])
 
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
@@ -53,35 +60,53 @@ export default function App() {
   }, [upsertHistory])
 
   const handleAdvanceToStage2 = useCallback((advancers) => {
-    const bracket = generateStage2Elim(advancers)
-    const s2 = { players: advancers, bracket }
-    setStage2(s2)
-    setTournament(prev => {
-      const u = { ...prev, stage2: s2 }; upsertHistory(u); return u
-    })
-    setView('stage2')
-  }, [upsertHistory])
+      // Check if stage2 already exists with the exact same ordered players
+      const prevIds = tournament?.stage2?.players.map(p => p.id).join(',') || ''
+      const newIds = advancers.map(p => p.id).join(',')
+
+      if (tournament?.stage2 && prevIds === newIds) {
+        // Data hasn't changed, just restore the existing Stage 2 view
+        setStage2(tournament.stage2)
+        setView('stage2')
+        return
+      }
+
+      // Data changed (or first time generation) -> Build fresh bracket
+      const bracket = generateStage2Elim(advancers)
+      const s2 = { players: advancers, bracket }
+      setStage2(s2)
+      setTournament(prev => {
+        const u = { ...prev, stage2: s2 }; upsertHistory(u); return u
+      })
+      setView('stage2')
+    }, [tournament, upsertHistory])
 
   const handleStage2BracketUpdate = useCallback((updatedBracket) => {
-    setStage2(prev => {
-      const s2 = { ...prev, bracket: updatedBracket }
-      setTournament(t => {
-        const u = { ...t, stage2: s2 }; upsertHistory(u); return u
+      setStage2(prev => {
+        const s2 = { ...prev, bracket: updatedBracket }
+        setTournament(t => {
+          // Check if the knockout stage has a winner
+          const isFinished = !!updatedBracket.champion;
+          const u = { ...t, stage2: s2 }; 
+          if (isFinished) u.isArchived = true; // Auto-archive!
+          upsertHistory(u); 
+          return u
+        })
+        return s2
       })
-      return s2
-    })
-  }, [upsertHistory])
+    }, [upsertHistory])
 
-  const handleRestore = (entry) => {
-    setTournament(entry)
-    if (entry.type === 'group') {
-      setGroups(entry.groups || null)
-      setStage2(entry.stage2 || null)
-      setView('groups')
-    } else {
-      setGroups(null); setStage2(null); setView('bracket')
+  const handleRestore = (entry, targetView = 'groups') => {
+      setTournament(entry)
+      if (entry.type === 'group') {
+        setGroups(entry.groups || null)
+        setStage2(entry.stage2 || null)
+        // FIX: Explicitly open Stage 2 if requested, otherwise open Groups
+        setView((targetView === 'stage2' && entry.stage2) ? 'stage2' : 'groups')
+      } else {
+        setGroups(null); setStage2(null); setView('bracket')
+      }
     }
-  }
 
   const handleHome = () => { setTournament(null); setGroups(null); setStage2(null); setView('home') }
 
@@ -123,15 +148,18 @@ export default function App() {
             onStart={handleStart}
             onGroupStart={handleGroupStart}
             onArchiveGroup={archiveEntry}
-            onOpenGroup={(id) => {
+            onOpenGroup={(id, targetView = 'groups') => {
               const entry = history.find(e => e.id === id)
-              if (entry) handleRestore(entry)
+              if (entry) {
+                handleRestore(entry, targetView)
+              }
               else alert('Tournament data not found in history.')
             }}
             history={history}
           />
         )}
         
+        {/* Pass the hasStage2 flag down so GroupView knows not to ask for confirmation */}
         {view === 'bracket' && tournament && (
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
@@ -142,6 +170,7 @@ export default function App() {
             onGroupsUpdate={handleGroupsUpdate}
             onBack={handleHome}
             onAdvanceToStage2={handleAdvanceToStage2}
+            hasStage2={!!stage2}
           />
         )}
         

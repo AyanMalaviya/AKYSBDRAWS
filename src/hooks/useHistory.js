@@ -13,7 +13,7 @@ export function useHistory() {
     catch {}
   }, [history])
 
-  const upsertHistory = (tournament) => {
+const upsertHistory = (tournament) => {
     if (!tournament?.id) return
     setHistory(prev => {
       const existing = prev.findIndex(e => e.id === tournament.id)
@@ -26,12 +26,13 @@ export function useHistory() {
         playerCount: tournament.players?.length || 0,
         players: tournament.players || [],
         bracket: tournament.bracket,
-        // BUG FIX #6: always persist both groups (round 1) and round2Groups separately
         groups: tournament.groups,
+        stage2: tournament.stage2,
         round2Groups: tournament.round2Groups,
         round2Players: tournament.round2Players,
         round: tournament.round,
-        champion: tournament.bracket?.champion || null,
+        // FIX: Extract the champion from Stage 2 if applicable
+        champion: tournament.stage2?.bracket?.champion || tournament.bracket?.champion || null,
         isArchived: tournament.isArchived !== undefined
           ? tournament.isArchived
           : (existing >= 0 ? prev[existing].isArchived : false)

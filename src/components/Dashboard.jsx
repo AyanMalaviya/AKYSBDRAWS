@@ -78,10 +78,34 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                   <span>👥 {entry.playerCount} players</span>
                   <span>🕒 {fmtDate(entry.savedAt)}</span>
                 </div>
-                <div className="hcard-players">
-                  {entry.players.slice(0, 6).map(p => (
-                    <span key={p.id} className="p-chip">{p.name}</span>
-                  ))}
+                
+                {/* NEW: Champion Highlight Banner */}
+                {entry.champion && (
+                  <div style={{
+                    marginTop: 12, marginBottom: 4, padding: '8px 12px',
+                    background: 'linear-gradient(90deg, rgba(255,215,0,0.15), rgba(255,215,0,0.02))',
+                    borderLeft: '3px solid var(--neon-yellow)',
+                    borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8
+                  }}>
+                    <span style={{ fontSize: 18 }}>🏆</span>
+                    <span style={{ color: 'var(--neon-yellow)', fontWeight: 800, fontSize: 14 }}>
+                      Winner: {entry.champion.name}
+                    </span>
+                  </div>
+                )}
+
+                <div className="hcard-players" style={{ marginTop: entry.champion ? 8 : 12 }}>
+                  {entry.players.slice(0, 6).map(p => {
+                    const isChamp = entry.champion?.id === p.id;
+                    return (
+                      <span key={p.id} className="p-chip" style={
+                        isChamp ? { background: 'rgba(255,215,0,0.2)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)' } : {}
+                      }>
+                        {isChamp && <span style={{ marginRight: 4 }}>🏆</span>}
+                        {p.name}
+                      </span>
+                    )
+                  })}
                   {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
                 </div>
                 <div className="hcard-actions">

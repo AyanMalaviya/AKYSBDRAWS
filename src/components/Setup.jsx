@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import { TAG_META } from '../engine/groupEngine.js'
@@ -45,6 +45,19 @@ function ConfirmModal({ msg, onConfirm, onCancel }) {
 export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGroup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+
+  useEffect(() => {
+    const archivedIds = history.filter(h => h.isArchived).map(h => h.id)
+    if (archivedIds.length > 0 && s.groupSetups.length > 0) {
+      const remaining = s.groupSetups.filter(g => !archivedIds.includes(g.id))
+      if (remaining.length !== s.groupSetups.length) {
+        set('groupSetups', remaining) // Removes the card from the lobby
+        if (archivedIds.includes(s.activeGroupId)) {
+          set('activeGroupId', null)
+        }
+      }
+    }
+  }, [history, s.groupSetups, s.activeGroupId, set])
 
   const applyCount = (n) => {
     set('count', n)
@@ -294,16 +307,26 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                           >🗑</button>
                         </div>
                       </div>
-
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
                          {isGenerated ? (
                            <span className="tag tag-green" style={{ fontSize: 10, padding: '4px 8px' }}>🟢 Active</span>
                          ) : (
                            <span className="tag" style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.08)' }}>Draft</span>
                          )}
-                         <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
-                           {isGenerated ? 'Open Matches ➔' : 'Setup Draft ➔'}
-                         </span>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                           {/* Add direct Stage 2 navigation button if Stage 2 data exists */}
+                           {isGenerated && history.find(h => h.id === g.id)?.stage2 && (
+                             <button
+                               onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'stage2'); }}
+                               style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 'bold', cursor: 'pointer' }}
+                             >
+                               ▶ Stage 2
+                             </button>
+                           )}
+                           <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
+                             {isGenerated ? 'Open Stage 1 ➔' : 'Setup Draft ➔'}
+                           </span>
+                         </div>
                       </div>
                     </div>
                   )})}
@@ -424,6 +447,27 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                   {activeGroup.players.length >= 2 && (
                     <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                      
+                      {/* NEW: Navigation buttons if tournament is active */}
+                      {isActiveGenerated && (() => {
+                        const tournamentData = history.find(h => h.id === activeGroup.id);
+                        const hasStage2 = tournamentData && tournamentData.stage2;
+                        return (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginBottom: 24 }}>
+                            <button className="btn" style={{ background: 'rgba(0,212,255,0.15)', color: 'var(--neon-blue)', border: '1px solid rgba(0,212,255,0.4)', padding: '10px 20px' }}
+                              onClick={() => onOpenGroup(activeGroup.id, 'groups')}>
+                              ▶ Open Stage 1 (Groups)
+                            </button>
+                            {hasStage2 && (
+                              <button className="btn" style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '10px 20px' }}
+                                onClick={() => onOpenGroup(activeGroup.id, 'stage2')}>
+                                ▶ Open Stage 2 (Knockout)
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       <button className="gen-btn"
                         onClick={() => {
                           if (isActiveGenerated) {

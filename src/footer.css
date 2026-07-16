@@ -1,69 +1,123 @@
 /* ── Footer ── */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap');
 
 .site-footer {
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
   width: 100%;
-  height: 48px;
+  height: 64px; 
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  background: transparent;
-  flex-shrink: 0;
-  margin-top: auto;
-}
-
-.footer-wave-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  opacity: 0.9;
+  /* Cyberpunk Glassmorphism Backdrop */
+  background: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6), transparent);
+  backdrop-filter: blur(4px);
+  border-top: 1px solid rgba(0, 212, 255, 0.05); /* Subtle rim light */
+  z-index: 1000;
+  pointer-events: none; 
 }
 
 .footer-content {
   position: relative;
-  z-index: 1;
-  margin-bottom: 40px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0;
+  gap: 8px; /* Spacing between rows */
   font-family: 'Orbitron', 'Courier New', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(180, 200, 220, 0.7);
-  text-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
   white-space: nowrap;
+  pointer-events: auto; /* Re-enables clicking for the container */
+  padding-bottom: 10px;
+}
+
+.footer-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 
 .footer-text {
-  color: rgba(160, 185, 210, 0.65);
+  color: rgba(255, 255, 255, 0.45);
 }
 
-.footer-link {
-  color: #00d4ff;
-  text-decoration: none;
+.main-dev {
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  text-shadow:
-    0 0 6px rgba(0, 212, 255, 0.9),
-    0 0 12px rgba(0, 212, 255, 0.5),
-    0 0 24px rgba(0, 212, 255, 0.2);
-  transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 
-.footer-link:hover {
-  color: #b400ff;
-  text-shadow:
-    0 0 6px rgba(180, 0, 255, 0.9),
-    0 0 14px rgba(180, 0, 255, 0.6),
-    0 0 28px rgba(180, 0, 255, 0.3);
+.sub-dev {
+  font-size: 8px; 
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .footer-wave-canvas { display: none; }
+/* Base Link Reset */
+.footer-link {
+  position: relative;
+  text-decoration: none;
+  font-weight: 900;
+  padding-bottom: 2px; /* Gives room for the underline */
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+/* --- CYAN NEON (Ayan) --- */
+.neon-cyan {
+  color: #00d4ff;
+  text-shadow: 0 0 4px rgba(0, 212, 255, 0.8), 0 0 12px rgba(0, 212, 255, 0.3);
+}
+
+/* The Glowing Underline */
+.neon-cyan::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: #00d4ff;
+  box-shadow: 0 0 8px #00d4ff, 0 0 16px rgba(0, 212, 255, 0.5);
+  transition: all 0.3s ease;
+}
+
+.neon-cyan:hover {
+  color: #ffffff;
+  text-shadow: 0 0 8px #00d4ff, 0 0 16px #00d4ff, 0 0 24px #00d4ff;
+}
+
+.neon-cyan:hover::after {
+  background: #ffffff;
+  box-shadow: 0 0 12px #00d4ff, 0 0 24px #00d4ff;
+  height: 3px; /* Thickens on hover */
+}
+
+/* --- GREEN NEON (Sufyan) --- */
+.neon-green {
+  color: #00ffb4; 
+  text-shadow: 0 0 4px rgba(0, 255, 180, 0.8), 0 0 12px rgba(0, 255, 180, 0.3);
+}
+
+/* The Glowing Underline */
+.neon-green::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px; /* Slightly thinner for the tester row */
+  background: #00ffb4;
+  box-shadow: 0 0 8px #00ffb4, 0 0 16px rgba(0, 255, 180, 0.5);
+  transition: all 0.3s ease;
+}
+
+.neon-green:hover {
+  color: #ffffff;
+  text-shadow: 0 0 8px #00ffb4, 0 0 16px #00ffb4, 0 0 24px #00ffb4;
+}
+
+.neon-green:hover::after {
+  background: #ffffff;
+  box-shadow: 0 0 12px #00ffb4, 0 0 24px #00ffb4;
+  height: 2px;
 }
