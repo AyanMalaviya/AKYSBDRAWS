@@ -10,7 +10,7 @@ html {
 }
 
 #root {
-  padding-bottom: 60px; 
+  /* No bottom padding — footer is static, not fixed */
 }
 
 /* ─ Tokens ─────────────────────────────────────────────────── */
@@ -39,19 +39,18 @@ html {
   --neon-blue:    var(--purple-light);
   --neon-purple:  var(--purple);
   --neon-green:   var(--green);
-  --neon-pink:    var(--gold);        /* replace pink refs with gold */
+  --neon-pink:    var(--gold);
   --neon-yellow:  var(--gold-light);
 
   --accent:  var(--purple);
   --accent2: var(--purple-light);
   --win:     var(--green);
-  --lose:    #c0392b;   /* deep red – no pink */
+  --lose:    #c0392b;
   --text:    var(--white-soft);
   --muted:   #7a7299;
   --radius:  12px;
   --nav-h:   58px;
 
-  /* 3-D button depth tokens */
   --btn-press-depth: 3px;
 }
 
@@ -109,7 +108,6 @@ input:focus, select:focus {
 }
 
 /* ─ Utility 3D Buttons ──────────────────────────────────── */
-/* Base 3D press effect – applied to all .btn variants */
 .btn { 
   padding: 9px 20px; 
   border-radius: 9px; 
@@ -118,7 +116,6 @@ input:focus, select:focus {
   background: var(--surface3);
   color: var(--text);
   border: 1px solid var(--border2);
-  /* 3D base shadow stack */
   box-shadow:
     0 var(--btn-press-depth) 0 0 rgba(0,0,0,0.55),
     0 var(--btn-press-depth) 8px rgba(0,0,0,0.35),
@@ -142,7 +139,6 @@ input:focus, select:focus {
   transition: box-shadow 0.12s, top 0.12s, background 0.15s;
 }
 
-/* Hover: lift slightly */
 .btn:hover, .btn-sm:hover { 
   top: -1px;
   box-shadow:
@@ -151,7 +147,6 @@ input:focus, select:focus {
     inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
-/* Active: press in */
 .btn:active, .btn-sm:active {
   top: calc(var(--btn-press-depth) - 1px);
   box-shadow:
@@ -160,7 +155,6 @@ input:focus, select:focus {
     inset 0 2px 4px rgba(0,0,0,0.3);
 }
 
-/* ── Button Variants ── */
 .btn-primary {
   background: linear-gradient(145deg, #9d71f8, var(--purple));
   color: #fff;
@@ -297,7 +291,6 @@ input:focus, select:focus {
   transition: transform 0.2s ease;
 }
 .topnav-brand:hover { transform: scale(1.02); }
-.brand-trophy { font-size: 22px; filter: drop-shadow(0 0 6px var(--gold-light)); transition: all 0.2s; }
 .brand-name   { font-size: 17px; font-weight: 900; letter-spacing: -0.3px; color: var(--white-soft); }
 .brand-accent { color: var(--gold-light); text-shadow: 0 0 10px var(--gold-glow); }
 .brand-sub    { font-size: 11px; color: var(--muted); margin-top: 1px; }
@@ -342,6 +335,36 @@ input:focus, select:focus {
   border-radius: 99px; padding: 2px 6px;
   margin-left: 4px; vertical-align: middle;
 }
+
+/* ─ Footer ──────────────────────────────────────────────────── */
+.site-footer {
+  position: static;        /* never fixed or sticky */
+  width: 100%;
+  margin-top: 48px;        /* breathing room above */
+  padding: 20px 24px;
+  border-top: 1px solid rgba(139,92,246,0.12);
+  background: rgba(6,5,14,0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.footer-content {
+  max-width: 1600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-row       { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.footer-text      { font-size: 12px; color: var(--muted); }
+.footer-link      { font-size: 12px; font-weight: 700; text-decoration: none; transition: opacity 0.2s; }
+.footer-link:hover { opacity: 0.75; }
+.main-dev         { font-size: 13px; }
+.sub-dev          { font-size: 11px; opacity: 0.8; }
+.neon-cyan        { color: var(--purple-light); }
+.neon-green       { color: var(--green); }
 
 /* ─ Main Content ────────────────────────────────────────────── */
 .main-content {
@@ -404,7 +427,6 @@ input:focus, select:focus {
 }
 .setup-hero-sub { color: var(--muted); font-size: 15px; margin-top: 8px; }
 
-/* Mode toggle */
 .mode-toggle-bar {
   display: flex; gap: 0; margin-bottom: 16px;
   padding: 4px; border-radius: 12px;
@@ -415,7 +437,6 @@ input:focus, select:focus {
   font-size: 13px; font-weight: 700;
   background: transparent; color: var(--muted);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  /* 3D */
   position: relative; top: 0;
   box-shadow: none;
 }
@@ -426,7 +447,6 @@ input:focus, select:focus {
 }
 .mode-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.035); }
 
-/* Step label */
 .step-label { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .step-num {
   width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
@@ -437,7 +457,6 @@ input:focus, select:focus {
 }
 .step-title { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; }
 
-/* Clear names btn */
 .clear-names-btn {
   margin-left: auto;
   padding: 5px 12px; border-radius: 7px;
@@ -446,7 +465,6 @@ input:focus, select:focus {
   color: #e05b4e;
   border: 1px solid rgba(192,57,43,0.28);
   white-space: nowrap; flex-shrink: 0;
-  /* 3D */
   position: relative; top: 0;
   box-shadow: 0 2px 0 0 rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
   transition: top 0.1s, box-shadow 0.1s, background 0.15s;
@@ -508,7 +526,6 @@ input:focus, select:focus {
   gap: 8px;
 }
 
-/* Generate Button */
 .gen-btn {
   position: relative; overflow: hidden;
   padding: 13px 48px; border-radius: 12px;
@@ -516,7 +533,6 @@ input:focus, select:focus {
   background: linear-gradient(135deg, var(--gold), var(--gold-light), var(--purple));
   background-size: 200%;
   color: #0f0c1a;
-  /* 3D shadow */
   box-shadow:
     0 4px 0 0 #7a5500,
     0 6px 20px rgba(212,160,23,0.3),
@@ -706,7 +722,6 @@ input:focus, select:focus {
   .topnav { padding: 0 12px; }
   .brand-sub { display: none; }
   .brand-name { font-size: 15px; }
-  .brand-trophy { font-size: 18px; gap: 6px; }
   .topnav-nav { gap: 4px; }
   .nav-pill { padding: 6px 10px; font-size: 12px; }
   .hide-mob { display: none; }

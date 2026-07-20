@@ -72,46 +72,26 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  /**
-   * Called by GroupView when user clicks "Proceed to Stage 2".
-   * stage2Type: 'knockout' | 'groups'
-   */
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     if (stage2Type === 'groups') {
-      // Reassign A/B/C tags based on stage-1 performance before the new draw.
-      // This ensures A players are seeded into different groups (A never vs A).
       const seededAdvancers = reassignTagsByStandings(advancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s2 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
-
-      setStage2(s2)
-      setGroups(newGroups)
-      setTournament(prev => {
-        const u = { ...prev, stage2: s2, groups: newGroups }
-        upsertHistory(u)
-        return u
-      })
+      setStage2(s2); setGroups(newGroups)
+      setTournament(prev => { const u = { ...prev, stage2: s2, groups: newGroups }; upsertHistory(u); return u })
       navigate('stage2')
       return
     }
-
-    // --- Knockout path ---
     const prevIds = tournament?.stage2?.players?.map(p => p.id).join(',') || ''
     const newIds  = advancers.map(p => p.id).join(',')
-
     if (tournament?.stage2 && tournament.stage2.type !== 'groups' && prevIds === newIds) {
-      setStage2(tournament.stage2)
-      setView('stage2')
-      return
+      setStage2(tournament.stage2); setView('stage2'); return
     }
-
     const bracket = generateStage2Elim(advancers)
     const s2 = { type: 'knockout', players: advancers, bracket }
     setStage2(s2)
-    setTournament(prev => {
-      const u = { ...prev, stage2: s2 }; upsertHistory(u); return u
-    })
+    setTournament(prev => { const u = { ...prev, stage2: s2 }; upsertHistory(u); return u })
     navigate('stage2')
   }, [tournament, upsertHistory, navigate])
 
@@ -133,22 +113,18 @@ export default function App() {
     setGroups(updatedGroups)
     setStage2(prev => {
       const s2 = { ...prev, groups: updatedGroups }
-      setTournament(t => {
-        const u = { ...t, stage2: s2 }; upsertHistory(u); return u
-      })
+      setTournament(t => { const u = { ...t, stage2: s2 }; upsertHistory(u); return u })
       return s2
     })
   }, [upsertHistory])
 
-  /** Stage 2 groups → Stage 3: same tag-reassignment logic applied again */
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(advancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s3 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
-      setStage2(s3)
-      setGroups(newGroups)
+      setStage2(s3); setGroups(newGroups)
       setTournament(prev => { const u = { ...prev, stage2: s3, groups: newGroups }; upsertHistory(u); return u })
       navigate('stage2')
       return
@@ -184,12 +160,9 @@ export default function App() {
     <div className="app-shell">
       <header className="topnav">
         <div className="topnav-brand" onClick={handleHome}>
-          <img src="/AKYSBLogoCircle.png" alt="AKYSB Logo"
-            style={{ height: 40, width: 40, borderRadius: '50%', boxShadow: '0 0 12px rgba(139,92,246,0.4)' }}
-          />
           <div>
-            <div className="brand-name">AKYSB <span className="brand-accent">DRAWS</span></div>
-            <div className="brand-sub">Tournament Draw Manager</div>
+            <div className="brand-name">Tournament <span className="brand-accent">Draws</span></div>
+            <div className="brand-sub">Draw Manager</div>
           </div>
         </div>
         <nav className="topnav-nav">
