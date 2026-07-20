@@ -36,7 +36,6 @@ export function recomputeGroup(g) {
       (m.p1.id === ideal.p2.id && m.p2.id === ideal.p1.id)
     )
     if (existing) {
-      // Normalise so p1/p2 always match the ideal order
       const flipped = existing.p1.id === ideal.p2.id
       return {
         ...existing,
@@ -62,13 +61,10 @@ export function recomputeGroup(g) {
     const p1s = standings.find(s => s.id === m.p1.id)
     const p2s = standings.find(s => s.id === m.p2.id)
     if (!p1s || !p2s) return
-
-    // Accumulate scores if present
     if (m.score1 != null && m.score2 != null) {
-      p1s.scoredFor     += m.score1;  p1s.scoredAgainst += m.score2
-      p2s.scoredFor     += m.score2;  p2s.scoredAgainst += m.score1
+      p1s.scoredFor += m.score1; p1s.scoredAgainst += m.score2
+      p2s.scoredFor += m.score2; p2s.scoredAgainst += m.score1
     }
-
     if (m.winner === 'draw') {
       p1s.draws++; p1s.points++; p1s.played++
       p2s.draws++; p2s.points++; p2s.played++
@@ -85,7 +81,7 @@ export function recomputeGroup(g) {
 
   // Sort: points → scoreDiff → scoredFor → name
   standings.sort((a, b) =>
-    (b.points - a.points) ||
+    (b.points    - a.points)    ||
     (b.scoreDiff - a.scoreDiff) ||
     (b.scoredFor - a.scoredFor) ||
     a.name.localeCompare(b.name)
@@ -101,31 +97,39 @@ export function getGroupWinner(group) {
 }
 
 /**
+ * Two players are truly tied only when ALL tiebreaker keys are equal.
+ * Order: points → scoreDiff → scoredFor → name (name always differs, so
+ * a true tie at the boundary only means the first three are identical).
+ */
+const trulyTied = (a, b) =>
+  a.points    === b.points    &&
+  a.scoreDiff === b.scoreDiff &&
+  a.scoredFor === b.scoredFor
+
+/**
  * Returns advancer info for `count` advancers per group.
- * Tiebreaker order: points → scoreDiff → scoredFor → name
+ * Auto-resolves ties via scoreDiff → scoredFor first;
+ * manual TieBreakerPanel only shows for genuinely equal players.
  */
 export function getGroupAdvancerInfo(group, count = 2) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return { advancers: [], tied: [], needsTieBreak: false }
 
-  const sorted = group.standings
+  const sorted = group.standings   // already sorted by full key in recomputeGroup
   if (sorted.length <= 1) return { advancers: sorted, tied: [], needsTieBreak: false }
 
   const safeCount = Math.min(count, sorted.length)
   const boundary  = sorted[safeCount - 1]
-  const nextOne   = sorted[safeCount]
+  const nextOne   = sorted[safeCount]   // first player NOT advancing
 
-  const sameRank = (a, b) =>
-    a.points === b.points &&
-    a.scoreDiff === b.scoreDiff &&
-    a.scoredFor === b.scoredFor
-
-  if (!nextOne || !sameRank(boundary, nextOne)) {
+  // No true tie at boundary → advance cleanly
+  if (!nextOne || !trulyTied(boundary, nextOne)) {
     return { advancers: sorted.slice(0, safeCount), tied: [], needsTieBreak: false }
   }
 
-  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(p => !sameRank(p, boundary))
-  const tiedPlayers    = sorted.filter(p => sameRank(p, boundary))
+  // True tie: players clearly above boundary + all tied players for manual resolution
+  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(p => !trulyTied(p, boundary))
+  const tiedPlayers    = sorted.filter(p => trulyTied(p, boundary))
   return { advancers: clearAdvancers, tied: tiedPlayers, needsTieBreak: true }
 }
 
@@ -135,6 +139,38 @@ export function getGroupAdvancers(group, count = 2) {
   return advancers.slice(0, count)
 }
 
+/**
+ * Reassigns A / B / C tags to a flat list of advancers based on their
+ * relative standing (points → scoreDiff → scoredFor → name).
+ *
+ * Top third  → A (strong)
+ * Mid third  → B (average)
+ * Bottom third → C (weak)
+ *
+ * This ensures the stage-2 group draw separates strong players.
+ */
+export function reassignTagsByStandings(players) {
+  if (!players || players.length === 0) return players
+
+  const sorted = [...players].sort((a, b) =>
+    (b.points    ?? 0) - (a.points    ?? 0) ||
+    (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) ||
+    (b.scoredFor ?? 0) - (a.scoredFor ?? 0) ||
+    (a.name ?? '').localeCompare(b.name ?? '')
+  )
+
+  const n    = sorted.length
+  const aEnd = Math.ceil(n / 3)           // top third
+  const bEnd = Math.ceil((n * 2) / 3)     // mid third
+
+  const tagMap = {}
+  sorted.forEach((p, i) => {
+    tagMap[p.id] = i < aEnd ? 'A' : i < bEnd ? 'B' : 'C'
+  })
+
+  return players.map(p => ({ ...p, tag: tagMap[p.id] ?? p.tag }))
+}
+
 // Derives winner from scores, stores them, then recomputes standings
 export function recordGroupResultWithScore(groups, groupId, matchId, score1, score2) {
   return groups.map(g => {
@@ -142,9 +178,9 @@ export function recordGroupResultWithScore(groups, groupId, matchId, score1, sco
     const matches = g.matches.map(m => {
       if (m.id !== matchId) return m
       let winner = null
-      if (score1 > score2)       winner = m.p1
-      else if (score2 > score1)  winner = m.p2
-      else                       winner = 'draw'
+      if (score1 > score2)      winner = m.p1
+      else if (score2 > score1) winner = m.p2
+      else                      winner = 'draw'
       return { ...m, score1, score2, winner }
     })
     return recomputeGroup({ ...g, matches })
@@ -154,13 +190,14 @@ export function recordGroupResultWithScore(groups, groupId, matchId, score1, sco
 export function recordGroupResult(groups, groupId, matchId, winner) {
   return groups.map(g => {
     if (g.id !== groupId) return g
-    // Clear scores when result is set manually (no score entry)
     const matches = g.matches.map(m => m.id !== matchId ? m : { ...m, winner, score1: null, score2: null })
     return recomputeGroup({ ...g, matches })
   })
 }
 
 // === GROUP MAKING LOGIC ===
+// generateGroups already places one A per group via byTag buckets,
+// guaranteeing A never faces A in their group.
 export function generateGroups(players, groupSize) {
   const byTag = { A: [], B: [], C: [] }
   players.forEach(p => {
@@ -175,6 +212,7 @@ export function generateGroups(players, groupSize) {
   const numGroups = Math.max(1, Math.ceil(players.length / groupSize))
   const groups = Array.from({ length: numGroups }, () => [])
 
+  // Seed one A per group first — this prevents A vs A
   for (let i = 0; i < numGroups; i++) {
     if (shuffledA.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledA.shift())
     if (shuffledB.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledB.shift())
@@ -182,13 +220,9 @@ export function generateGroups(players, groupSize) {
   }
 
   const remaining = [...shuffledA, ...shuffledB, ...shuffledC]
-  const shuffledRemaining = shuffle(remaining)
-
-  for (const p of shuffledRemaining) {
+  for (const p of shuffle(remaining)) {
     let targetGroup = groups.find(g => g.length < groupSize)
-    if (!targetGroup) {
-      targetGroup = groups.reduce((minG, g) => g.length < minG.length ? g : minG, groups[0])
-    }
+    if (!targetGroup) targetGroup = groups.reduce((minG, g) => g.length < minG.length ? g : minG, groups[0])
     targetGroup.push(p)
   }
 

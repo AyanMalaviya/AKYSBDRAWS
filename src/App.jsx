@@ -5,7 +5,7 @@ import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
 import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim } from './engine/bracketEngine.js'
-import { generateGroups } from './engine/groupEngine.js'
+import { generateGroups, reassignTagsByStandings } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
 export default function App() {
@@ -78,11 +78,12 @@ export default function App() {
    */
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     if (stage2Type === 'groups') {
-      // Launch a new group-stage with the advancers
-      // Use the existing tournament id so history is updated in-place
-      const groupSize = Math.max(3, Math.round(advancers.length / Math.max(2, Math.round(advancers.length / 4))))
-      const newGroups = generateGroups(advancers, groupSize)
-      const s2 = { type: 'groups', players: advancers, groups: newGroups, groupSize }
+      // Reassign A/B/C tags based on stage-1 performance before the new draw.
+      // This ensures A players are seeded into different groups (A never vs A).
+      const seededAdvancers = reassignTagsByStandings(advancers)
+      const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
+      const newGroups = generateGroups(seededAdvancers, groupSize)
+      const s2 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
 
       setStage2(s2)
       setGroups(newGroups)
@@ -91,12 +92,11 @@ export default function App() {
         upsertHistory(u)
         return u
       })
-      // Navigate to a fresh groups view (reuse 'stage2' view slot)
       navigate('stage2')
       return
     }
 
-    // --- Knockout path (existing logic) ---
+    // --- Knockout path ---
     const prevIds = tournament?.stage2?.players?.map(p => p.id).join(',') || ''
     const newIds  = advancers.map(p => p.id).join(',')
 
@@ -129,7 +129,6 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  /** Stage 2 groups — same update logic as Stage 1 but writes into stage2.groups */
   const handleStage2GroupsUpdate = useCallback((updatedGroups) => {
     setGroups(updatedGroups)
     setStage2(prev => {
@@ -141,12 +140,13 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  /** Stage 2 groups advancing to Stage 3 (just a new knockout for now) */
+  /** Stage 2 groups → Stage 3: same tag-reassignment logic applied again */
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
     if (stage2Type === 'groups') {
-      const groupSize = Math.max(3, Math.round(advancers.length / Math.max(2, Math.round(advancers.length / 4))))
-      const newGroups = generateGroups(advancers, groupSize)
-      const s3 = { type: 'groups', players: advancers, groups: newGroups, groupSize }
+      const seededAdvancers = reassignTagsByStandings(advancers)
+      const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
+      const newGroups = generateGroups(seededAdvancers, groupSize)
+      const s3 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
       setStage2(s3)
       setGroups(newGroups)
       setTournament(prev => { const u = { ...prev, stage2: s3, groups: newGroups }; upsertHistory(u); return u })
@@ -173,7 +173,6 @@ export default function App() {
 
   const handleHome = () => { setTournament(null); setGroups(null); setStage2(null); navigate('home') }
 
-  // ── Stage 2 banner styles ──────────────────────────────────────────
   const s2BannerStyle = {
     display: 'flex', alignItems: 'center', gap: 12,
     background: 'linear-gradient(90deg, rgba(212,160,23,0.08), rgba(139,92,246,0.06))',
@@ -244,7 +243,6 @@ export default function App() {
 
         {view === 'stage2' && stage2 && (
           <div>
-            {/* Stage 2 banner */}
             <div style={s2BannerStyle}>
               <span style={{ fontSize: 24 }}>🏆</span>
               <div style={{ flex: 1 }}>
@@ -261,7 +259,6 @@ export default function App() {
               >🔙 Stage 1</button>
             </div>
 
-            {/* Stage 2 = Groups */}
             {stage2.type === 'groups' && stage2.groups && (
               <GroupView
                 groups={stage2.groups}
@@ -272,7 +269,6 @@ export default function App() {
               />
             )}
 
-            {/* Stage 2 = Knockout */}
             {stage2.type === 'knockout' && stage2.bracket && (
               <>
                 {stage2.bracket.pendingByeSelection && (
