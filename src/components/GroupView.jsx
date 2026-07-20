@@ -15,6 +15,22 @@ import {
 } from '../engine/groupEngine.js'
 import '../group.css'
 
+// Tiny inline tag — used in standings and match rows where space is tight
+const TinyTag = ({ tag }) => (
+  <span
+    className={`tag ${TAG_META[tag || 'C']?.badge || 'tag-green'}`}
+    style={{
+      fontSize: 8,
+      padding: '1px 5px',
+      letterSpacing: 0.5,
+      flexShrink: 0,
+      lineHeight: 1.4,
+    }}
+  >
+    {tag || 'C'}
+  </span>
+)
+
 // ── Score Entry Modal ─────────────────────────────────────────────────
 function ScoreModal({ match, onConfirm, onClose }) {
   const [s1, setS1] = useState(match.score1 ?? '')
@@ -60,7 +76,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
           {/* P1 */}
           <div style={{ flex: 1, textAlign: 'center' }}>
             <div style={{ marginBottom: 8 }}>
-              <span className={`tag ${TAG_META[match.p1.tag || 'C']?.badge || 'tag-green'}`}>{match.p1.tag || 'C'}</span>
+              <TinyTag tag={match.p1.tag} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8 }}>{match.p1.name}</div>
             <input
@@ -88,7 +104,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
           {/* P2 */}
           <div style={{ flex: 1, textAlign: 'center' }}>
             <div style={{ marginBottom: 8 }}>
-              <span className={`tag ${TAG_META[match.p2.tag || 'C']?.badge || 'tag-green'}`}>{match.p2.tag || 'C'}</span>
+              <TinyTag tag={match.p2.tag} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8 }}>{match.p2.name}</div>
             <input
@@ -151,12 +167,12 @@ function MatchRow({ match, onResult, onScoreEntry }) {
         className={`gm-player${match.winner?.id === match.p1.id ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner?.id === match.p1.id ? null : match.p1)}
       >
-        <span className={`tag ${TAG_META[match.p1.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
-          {match.p1.tag || 'C'}
+        <TinyTag tag={match.p1.tag} />
+        <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {match.p1.name}
         </span>
-        {match.p1.name}
         {hasScore && match.winner?.id === match.p1.id && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>
+          <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>
             {match.score1}–{match.score2}
           </span>
         )}
@@ -173,12 +189,12 @@ function MatchRow({ match, onResult, onScoreEntry }) {
         className={`gm-player${match.winner?.id === match.p2.id ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner?.id === match.p2.id ? null : match.p2)}
       >
-        <span className={`tag ${TAG_META[match.p2.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
-          {match.p2.tag || 'C'}
+        <TinyTag tag={match.p2.tag} />
+        <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {match.p2.name}
         </span>
-        {match.p2.name}
         {hasScore && match.winner?.id === match.p2.id && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>
+          <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>
             {match.score2}–{match.score1}
           </span>
         )}
@@ -192,7 +208,7 @@ function MatchRow({ match, onResult, onScoreEntry }) {
         style={{ fontSize: 14, minWidth: 34 }}
       >📊</button>
 
-      {/* Quick draw toggle (kept as shortcut) */}
+      {/* Quick draw toggle */}
       <button
         className={`gm-draw${match.winner === 'draw' ? ' gm-win' : ''}`}
         onClick={() => onResult(match.winner === 'draw' ? null : 'draw')}
@@ -228,13 +244,16 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
             >
               <td>{i + 1}</td>
               <td>
-                {i === 0 && isAdv && <span title="Winner">🏆 </span>}
-                {i === 1 && isAdv && <span title="Runner-up">⭐ </span>}
-                {isTied           && <span title="Tied">⚖️ </span>}
-                <span className={`tag ${TAG_META[s.tag || 'C']?.badge || 'tag-blue'}`} style={{ marginRight: 6 }}>
-                  {s.tag || 'C'}
-                </span>
-                {s.name}
+                {/* Single flex row — emoji + tiny tag + name, no wrapping */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', minWidth: 0 }}>
+                  {i === 0 && isAdv && <span title="Winner" style={{ flexShrink: 0 }}>🏆</span>}
+                  {i === 1 && isAdv && <span title="Runner-up" style={{ flexShrink: 0 }}>⭐</span>}
+                  {isTied           && <span title="Tied" style={{ flexShrink: 0 }}>⚖️</span>}
+                  <TinyTag tag={s.tag} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.name}
+                  </span>
+                </div>
               </td>
               <td>{s.played}</td><td>{s.wins}</td><td>{s.draws}</td><td>{s.losses}</td>
               <td><strong>{s.points}</strong></td>
@@ -271,7 +290,7 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
         <div className="tb-players">
           {remaining.map(p => (
             <div key={p.id} className="tb-player-row">
-              <span className={`tag ${TAG_META[p.tag || 'C']?.badge || 'tag-blue'}`}>{p.tag || 'C'}</span>
+              <TinyTag tag={p.tag} />
               <span className="tb-player-name">{p.name}</span>
               <span className="tb-player-pts">{p.points ?? 0}pts • {p.wins ?? 0}W</span>
               <button className="tb-eliminate-btn" onClick={() => onEliminate(p.id)} title={`Eliminate ${p.name}`}>❌</button>
@@ -285,7 +304,7 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
 
 function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, onEditAction, eliminatedIds, onEliminate, advancersPerGroup }) {
   const [showStandings, setShowStandings] = useState(false)
-  const [scoreModal, setScoreModal]       = useState(null) // match object or null
+  const [scoreModal, setScoreModal]       = useState(null)
 
   const done    = group.matches.filter(m => m.winner).length
   const total   = group.matches.length
