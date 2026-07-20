@@ -21,7 +21,7 @@ function makeRoundRobin(players, groupId) {
   const matches = []
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
-      matches.push({ id: uid(), groupId, p1: players[i], p2: players[j], winner: null })
+      matches.push({ id: uid(), groupId, p1: players[i], p2: players[j], winner: null, score1: null, score2: null })
     }
   }
   return matches
@@ -36,10 +36,14 @@ export function recomputeGroup(g) {
       (m.p1.id === ideal.p2.id && m.p2.id === ideal.p1.id)
     )
     if (existing) {
+      // Normalise so p1/p2 always match the ideal order
+      const flipped = existing.p1.id === ideal.p2.id
       return {
         ...existing,
-        p1: g.players.find(p => p.id === existing.p1.id) || existing.p1,
-        p2: g.players.find(p => p.id === existing.p2.id) || existing.p2,
+        p1: g.players.find(p => p.id === ideal.p1.id) || ideal.p1,
+        p2: g.players.find(p => p.id === ideal.p2.id) || ideal.p2,
+        score1: flipped ? existing.score2 : existing.score1,
+        score2: flipped ? existing.score1 : existing.score2,
         winner: existing.winner === 'draw' ? 'draw'
           : (existing.winner ? g.players.find(p => p.id === existing.winner.id) || null : null),
       }
@@ -47,12 +51,24 @@ export function recomputeGroup(g) {
     return ideal
   })
 
-  const standings = g.players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
+  const standings = g.players.map(p => ({
+    ...p,
+    played: 0, wins: 0, draws: 0, losses: 0, points: 0,
+    scoredFor: 0, scoredAgainst: 0, scoreDiff: 0,
+  }))
+
   newMatches.forEach(m => {
     if (!m.winner) return
     const p1s = standings.find(s => s.id === m.p1.id)
     const p2s = standings.find(s => s.id === m.p2.id)
     if (!p1s || !p2s) return
+
+    // Accumulate scores if present
+    if (m.score1 != null && m.score2 != null) {
+      p1s.scoredFor     += m.score1;  p1s.scoredAgainst += m.score2
+      p2s.scoredFor     += m.score2;  p2s.scoredAgainst += m.score1
+    }
+
     if (m.winner === 'draw') {
       p1s.draws++; p1s.points++; p1s.played++
       p2s.draws++; p2s.points++; p2s.played++
@@ -65,7 +81,16 @@ export function recomputeGroup(g) {
     }
   })
 
-  standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
+  standings.forEach(s => { s.scoreDiff = s.scoredFor - s.scoredAgainst })
+
+  // Sort: points → scoreDiff → scoredFor → name
+  standings.sort((a, b) =>
+    (b.points - a.points) ||
+    (b.scoreDiff - a.scoreDiff) ||
+    (b.scoredFor - a.scoredFor) ||
+    a.name.localeCompare(b.name)
+  )
+
   return { ...g, matches: newMatches, standings }
 }
 
@@ -77,7 +102,7 @@ export function getGroupWinner(group) {
 
 /**
  * Returns advancer info for `count` advancers per group.
- * count = 1 → only winner; count = 2 → winner + runner-up (default); etc.
+ * Tiebreaker order: points → scoreDiff → scoredFor → name
  */
 export function getGroupAdvancerInfo(group, count = 2) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
@@ -87,24 +112,20 @@ export function getGroupAdvancerInfo(group, count = 2) {
   if (sorted.length <= 1) return { advancers: sorted, tied: [], needsTieBreak: false }
 
   const safeCount = Math.min(count, sorted.length)
+  const boundary  = sorted[safeCount - 1]
+  const nextOne   = sorted[safeCount]
 
-  // The last advancer slot — check if there's a tie at that boundary
-  const boundary = sorted[safeCount - 1]
-  const nextOne  = sorted[safeCount]   // first player NOT advancing (may be undefined)
+  const sameRank = (a, b) =>
+    a.points === b.points &&
+    a.scoreDiff === b.scoreDiff &&
+    a.scoredFor === b.scoredFor
 
-  // No tie at boundary → advance top `safeCount` cleanly
-  if (!nextOne || boundary.points !== nextOne.points || boundary.wins !== nextOne.wins) {
+  if (!nextOne || !sameRank(boundary, nextOne)) {
     return { advancers: sorted.slice(0, safeCount), tied: [], needsTieBreak: false }
   }
 
-  // Tie exists at boundary → advancers = those clearly above the boundary,
-  // tied = all players sharing boundary score
-  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(
-    p => p.points !== boundary.points || p.wins !== boundary.wins
-  )
-  const tiedPlayers = sorted.filter(
-    p => p.points === boundary.points && p.wins === boundary.wins
-  )
+  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(p => !sameRank(p, boundary))
+  const tiedPlayers    = sorted.filter(p => sameRank(p, boundary))
   return { advancers: clearAdvancers, tied: tiedPlayers, needsTieBreak: true }
 }
 
@@ -114,7 +135,32 @@ export function getGroupAdvancers(group, count = 2) {
   return advancers.slice(0, count)
 }
 
-// === UPDATED GROUP MAKING LOGIC ===
+// Derives winner from scores, stores them, then recomputes standings
+export function recordGroupResultWithScore(groups, groupId, matchId, score1, score2) {
+  return groups.map(g => {
+    if (g.id !== groupId) return g
+    const matches = g.matches.map(m => {
+      if (m.id !== matchId) return m
+      let winner = null
+      if (score1 > score2)       winner = m.p1
+      else if (score2 > score1)  winner = m.p2
+      else                       winner = 'draw'
+      return { ...m, score1, score2, winner }
+    })
+    return recomputeGroup({ ...g, matches })
+  })
+}
+
+export function recordGroupResult(groups, groupId, matchId, winner) {
+  return groups.map(g => {
+    if (g.id !== groupId) return g
+    // Clear scores when result is set manually (no score entry)
+    const matches = g.matches.map(m => m.id !== matchId ? m : { ...m, winner, score1: null, score2: null })
+    return recomputeGroup({ ...g, matches })
+  })
+}
+
+// === GROUP MAKING LOGIC ===
 export function generateGroups(players, groupSize) {
   const byTag = { A: [], B: [], C: [] }
   players.forEach(p => {
@@ -152,14 +198,6 @@ export function generateGroups(players, groupSize) {
   return allGroups.map((groupPlayers, i) =>
     recomputeGroup({ id: `G${i + 1}`, name: `Group ${i + 1}`, players: groupPlayers, matches: [] })
   )
-}
-
-export function recordGroupResult(groups, groupId, matchId, winner) {
-  return groups.map(g => {
-    if (g.id !== groupId) return g
-    const matches = g.matches.map(m => m.id !== matchId ? m : { ...m, winner })
-    return recomputeGroup({ ...g, matches })
-  })
 }
 
 // --- Edit-mode helpers ---
