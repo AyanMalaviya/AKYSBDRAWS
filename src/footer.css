@@ -6,16 +6,15 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 64px; 
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Cyberpunk Glassmorphism Backdrop */
-  background: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6), transparent);
+  background: linear-gradient(to top, rgba(6,5,14,0.96), rgba(6,5,14,0.62), transparent);
   backdrop-filter: blur(4px);
-  border-top: 1px solid rgba(0, 212, 255, 0.05); /* Subtle rim light */
+  border-top: 1px solid rgba(139,92,246,0.07);
   z-index: 1000;
-  pointer-events: none; 
+  pointer-events: none;
 }
 
 .footer-content {
@@ -23,11 +22,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px; /* Spacing between rows */
+  gap: 8px;
   font-family: 'Orbitron', 'Courier New', monospace;
   text-transform: uppercase;
   white-space: nowrap;
-  pointer-events: auto; /* Re-enables clicking for the container */
+  pointer-events: auto;
   padding-bottom: 10px;
 }
 
@@ -37,87 +36,62 @@
   justify-content: center;
 }
 
-.footer-text {
-  color: rgba(255, 255, 255, 0.45);
-}
+.footer-text { color: rgba(232,230,245,0.4); }
+.main-dev { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
+.sub-dev  { font-size: 8px;  font-weight: 700; letter-spacing: 0.08em; }
 
-.main-dev {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.sub-dev {
-  font-size: 8px; 
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-/* Base Link Reset */
 .footer-link {
   position: relative;
   text-decoration: none;
   font-weight: 900;
-  padding-bottom: 2px; /* Gives room for the underline */
+  padding-bottom: 2px;
   transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
-/* --- CYAN NEON (Ayan) --- */
-.neon-cyan {
-  color: #00d4ff;
-  text-shadow: 0 0 4px rgba(0, 212, 255, 0.8), 0 0 12px rgba(0, 212, 255, 0.3);
+/* ── Gold (Ayan) ── */
+.neon-gold {
+  color: var(--gold-light);
+  text-shadow: 0 0 4px rgba(212,160,23,0.8), 0 0 12px rgba(212,160,23,0.3);
 }
+.neon-gold::after {
+  content: '';
+  position: absolute; left: 0; bottom: 0;
+  width: 100%; height: 2px;
+  background: var(--gold-light);
+  box-shadow: 0 0 8px var(--gold-light), 0 0 16px rgba(212,160,23,0.5);
+  transition: all 0.3s ease;
+}
+.neon-gold:hover { color: #fff; text-shadow: 0 0 8px var(--gold-light), 0 0 16px var(--gold-light), 0 0 24px var(--gold-light); }
+.neon-gold:hover::after { background: #fff; box-shadow: 0 0 12px var(--gold-light), 0 0 24px var(--gold-light); height: 3px; }
 
-/* The Glowing Underline */
+/* ── Cyan alias kept for legacy ── */
+.neon-cyan {
+  color: var(--purple-light);
+  text-shadow: 0 0 4px rgba(139,92,246,0.8), 0 0 12px rgba(139,92,246,0.3);
+}
 .neon-cyan::after {
   content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 2px;
-  background: #00d4ff;
-  box-shadow: 0 0 8px #00d4ff, 0 0 16px rgba(0, 212, 255, 0.5);
+  position: absolute; left: 0; bottom: 0;
+  width: 100%; height: 2px;
+  background: var(--purple-light);
+  box-shadow: 0 0 8px var(--purple-light), 0 0 16px rgba(139,92,246,0.5);
   transition: all 0.3s ease;
 }
+.neon-cyan:hover { color: #fff; text-shadow: 0 0 8px var(--purple-light), 0 0 16px var(--purple-light), 0 0 24px var(--purple-light); }
+.neon-cyan:hover::after { background: #fff; box-shadow: 0 0 12px var(--purple-light), 0 0 24px var(--purple-light); height: 3px; }
 
-.neon-cyan:hover {
-  color: #ffffff;
-  text-shadow: 0 0 8px #00d4ff, 0 0 16px #00d4ff, 0 0 24px #00d4ff;
-}
-
-.neon-cyan:hover::after {
-  background: #ffffff;
-  box-shadow: 0 0 12px #00d4ff, 0 0 24px #00d4ff;
-  height: 3px; /* Thickens on hover */
-}
-
-/* --- GREEN NEON (Sufyan) --- */
+/* ── Green (Sufyan) ── */
 .neon-green {
-  color: #00ffb4; 
-  text-shadow: 0 0 4px rgba(0, 255, 180, 0.8), 0 0 12px rgba(0, 255, 180, 0.3);
+  color: var(--green);
+  text-shadow: 0 0 4px rgba(34,214,122,0.8), 0 0 12px rgba(34,214,122,0.3);
 }
-
-/* The Glowing Underline */
 .neon-green::after {
   content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 1px; /* Slightly thinner for the tester row */
-  background: #00ffb4;
-  box-shadow: 0 0 8px #00ffb4, 0 0 16px rgba(0, 255, 180, 0.5);
+  position: absolute; left: 0; bottom: 0;
+  width: 100%; height: 1px;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green), 0 0 16px rgba(34,214,122,0.5);
   transition: all 0.3s ease;
 }
-
-.neon-green:hover {
-  color: #ffffff;
-  text-shadow: 0 0 8px #00ffb4, 0 0 16px #00ffb4, 0 0 24px #00ffb4;
-}
-
-.neon-green:hover::after {
-  background: #ffffff;
-  box-shadow: 0 0 12px #00ffb4, 0 0 24px #00ffb4;
-  height: 2px;
-}
+.neon-green:hover { color: #fff; text-shadow: 0 0 8px var(--green), 0 0 16px var(--green), 0 0 24px var(--green); }
+.neon-green:hover::after { background: #fff; box-shadow: 0 0 12px var(--green), 0 0 24px var(--green); height: 2px; }
