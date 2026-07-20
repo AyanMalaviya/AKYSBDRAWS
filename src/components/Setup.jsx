@@ -51,7 +51,7 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
     if (archivedIds.length > 0 && s.groupSetups.length > 0) {
       const remaining = s.groupSetups.filter(g => !archivedIds.includes(g.id))
       if (remaining.length !== s.groupSetups.length) {
-        set('groupSetups', remaining) // Removes the card from the lobby
+        set('groupSetups', remaining)
         if (archivedIds.includes(s.activeGroupId)) {
           set('activeGroupId', null)
         }
@@ -150,7 +150,7 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
       <div className="setup-root">
         <motion.div className="setup-hero"
           initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <div className="setup-hero-title">AKYSB DRAWS</div>
+          <div className="setup-hero-title">Tournament Draws</div>
           <div className="setup-hero-sub">Build your tournament bracket - offline, instant, zero setup</div>
         </motion.div>
 
@@ -264,7 +264,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                 
                 <div className="formats-grid">
                   {s.groupSetups.map(g => {
-                    // Extract history data to make the card smart
                     const tournamentData = history.find(h => h.id === g.id);
                     const isGenerated = !!tournamentData;
                     const hasStage2 = tournamentData && tournamentData.stage2;
@@ -281,7 +280,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                          }}
                           onClick={() => {
                            if (isGenerated && onOpenGroup) {
-                             // Clicking the card defaults to Stage 2 if it exists, otherwise Groups
                              onOpenGroup(g.id, hasStage2 ? 'stage2' : 'groups');
                            } else {
                              set('activeGroupId', g.id);
@@ -313,7 +311,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                         </div>
                       </div>
                       
-                      {/* BOTTOM CARD UI: Compact Side-by-Side Nav Buttons */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto', flexWrap: 'nowrap' }}>
                          {isGenerated ? (
                            <span className="tag tag-green" style={{ fontSize: 10, padding: '4px 8px' }}>🟢 Active</span>
@@ -466,7 +463,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                     <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                       
-                      {/* Navigation buttons if tournament is active */}
                       {isActiveGenerated && (() => {
                         const tournamentData = history.find(h => h.id === activeGroup.id);
                         const hasStage2 = tournamentData && tournamentData.stage2;
@@ -514,8 +510,8 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
           </>
         )}
 
-        {/* Reset everything */}
-        <motion.div style={{ textAlign: 'center', paddingBottom: 16 }}
+        {/* Reset everything — extra bottom padding so it clears the footer */}
+        <motion.div style={{ textAlign: 'center', paddingBottom: 48 }}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
           <button
             onClick={clearAll}
@@ -527,7 +523,6 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
           >⚠️ Reset all setup data</button>
         </motion.div>
 
-        {/* Modal Mount for Delete */}
         <AnimatePresence>
           {confirmDeleteId && (
             <ConfirmModal

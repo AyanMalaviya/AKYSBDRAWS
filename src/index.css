@@ -337,15 +337,20 @@ input:focus, select:focus {
 }
 
 /* ─ Footer ──────────────────────────────────────────────────── */
+/*
+  Footer must NEVER be fixed or sticky.
+  It sits at the bottom of the normal document flow inside .app-shell (flex-column).
+  .main-content has flex:1 so it pushes the footer to the very bottom of the page.
+  No backdrop-filter here — that was causing it to appear to "float" on some browsers.
+*/
 .site-footer {
-  position: static;        /* never fixed or sticky */
+  position: static;
   width: 100%;
-  margin-top: 48px;        /* breathing room above */
+  margin-top: 48px;
   padding: 20px 24px;
   border-top: 1px solid rgba(139,92,246,0.12);
-  background: rgba(6,5,14,0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--bg2);
+  /* NO backdrop-filter — it was making the footer look detached/overlaid */
 }
 
 .footer-content {
