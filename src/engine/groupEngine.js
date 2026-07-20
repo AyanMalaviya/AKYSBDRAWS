@@ -75,27 +75,41 @@ export function getGroupWinner(group) {
   return group.standings[0] || null
 }
 
-export function getGroupAdvancerInfo(group) {
+/**
+ * Returns advancer info for `count` advancers per group.
+ * count = 1 → only winner; count = 2 → winner + runner-up (default); etc.
+ */
+export function getGroupAdvancerInfo(group, count = 2) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return { advancers: [], tied: [], needsTieBreak: false }
-  
+
   const sorted = group.standings
   if (sorted.length <= 1) return { advancers: sorted, tied: [], needsTieBreak: false }
-  if (sorted.length === 2) return { advancers: [sorted[0]], tied: [], needsTieBreak: false }
-  
-  const rank2 = sorted[1]
-  const rank3 = sorted[2]
-  const tied2and3 = rank2.points === rank3.points && rank2.wins === rank3.wins
-  if (!tied2and3) return { advancers: [sorted[0], rank2], tied: [], needsTieBreak: false }
-  
-  const tiedPlayers = sorted.slice(1).filter(
-    p => p.points === rank2.points && p.wins === rank2.wins
+
+  const safeCount = Math.min(count, sorted.length)
+
+  // The last advancer slot — check if there's a tie at that boundary
+  const boundary = sorted[safeCount - 1]
+  const nextOne  = sorted[safeCount]   // first player NOT advancing (may be undefined)
+
+  // No tie at boundary → advance top `safeCount` cleanly
+  if (!nextOne || boundary.points !== nextOne.points || boundary.wins !== nextOne.wins) {
+    return { advancers: sorted.slice(0, safeCount), tied: [], needsTieBreak: false }
+  }
+
+  // Tie exists at boundary → advancers = those clearly above the boundary,
+  // tied = all players sharing boundary score
+  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(
+    p => p.points !== boundary.points || p.wins !== boundary.wins
   )
-  return { advancers: [sorted[0]], tied: tiedPlayers, needsTieBreak: true }
+  const tiedPlayers = sorted.filter(
+    p => p.points === boundary.points && p.wins === boundary.wins
+  )
+  return { advancers: clearAdvancers, tied: tiedPlayers, needsTieBreak: true }
 }
 
 export function getGroupAdvancers(group, count = 2) {
-  const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(group)
+  const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(group, count)
   if (needsTieBreak) return [...advancers, ...tied]
   return advancers.slice(0, count)
 }
@@ -112,39 +126,29 @@ export function generateGroups(players, groupSize) {
   const shuffledB = shuffle(byTag.B || [])
   const shuffledC = shuffle(byTag.C || [])
 
-  // Calculate the required number of groups based on total players and group size
   const numGroups = Math.max(1, Math.ceil(players.length / groupSize))
   const groups = Array.from({ length: numGroups }, () => [])
 
-  // Step 1: Assign exactly 1 A, 1 B, and 1 C to each group (if available and space permits)
   for (let i = 0; i < numGroups; i++) {
     if (shuffledA.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledA.shift())
     if (shuffledB.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledB.shift())
     if (shuffledC.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledC.shift())
   }
 
-  // Step 2: Gather any remaining players that didn't fit into the initial 1A/1B/1C spread
   const remaining = [...shuffledA, ...shuffledB, ...shuffledC]
   const shuffledRemaining = shuffle(remaining)
 
-  // Step 3: Distribute remaining players randomly into groups that still have space
   for (const p of shuffledRemaining) {
     let targetGroup = groups.find(g => g.length < groupSize)
-    
-    // Fallback: If all groups are "full" but we still have players, 
-    // assign to the group with the fewest players
     if (!targetGroup) {
       targetGroup = groups.reduce((minG, g) => g.length < minG.length ? g : minG, groups[0])
     }
-    
     targetGroup.push(p)
   }
 
-  // Filter out any completely empty groups just in case
   const allGroups = groups.filter(g => g.length > 0)
-  
   if (allGroups.length === 0) return [recomputeGroup({ id: 'G1', name: 'Group 1', players, matches: [] })]
-  
+
   return allGroups.map((groupPlayers, i) =>
     recomputeGroup({ id: `G${i + 1}`, name: `Group ${i + 1}`, players: groupPlayers, matches: [] })
   )
