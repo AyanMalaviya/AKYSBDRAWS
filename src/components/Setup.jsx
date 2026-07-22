@@ -24,7 +24,8 @@ const defaults = {
   activeGroupId: null,
 }
 
-function ConfirmModal({ msg, onConfirm, onCancel }) {
+// ── Confirm Modal ────────────────────────────────────────────────────
+function ConfirmModal({ msg, confirmLabel = 'Confirm', danger = true, onConfirm, onCancel }) {
   return (
     <div className="modal-overlay" style={{ zIndex: 1000 }}>
       <motion.div className="modal-box"
@@ -36,7 +37,7 @@ function ConfirmModal({ msg, onConfirm, onCancel }) {
         <div className="modal-msg">{msg}</div>
         <div className="modal-btns">
           <button className="btn btn-ghost" onClick={onCancel} style={{ minWidth: 90 }}>Cancel</button>
-          <button className="btn btn-danger" onClick={onConfirm} style={{ minWidth: 90 }}>Archive</button>
+          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} style={{ minWidth: 90 }}>{confirmLabel}</button>
         </div>
       </motion.div>
     </div>
@@ -82,7 +83,13 @@ function Section({ step, title, action, children }) {
 
 export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGroup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+
+  // ── Confirmation dialog state ──
+  const [confirmDeleteId,    setConfirmDeleteId]    = useState(null)  // lobby card delete
+  const [confirmReset,       setConfirmReset]       = useState(false) // reset all setup data
+  const [confirmClearNames,  setConfirmClearNames]  = useState(false) // clear bracket names
+  const [confirmClearGroup,  setConfirmClearGroup]  = useState(false) // clear group names
+  const [confirmRegenerate,  setConfirmRegenerate]  = useState(false) // regenerate groups
 
   useEffect(() => {
     const archivedIds = history.filter(h => h.isArchived).map(h => h.id)
@@ -102,18 +109,18 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
     const n = parseInt(val)
     if (!isNaN(n) && n >= 2 && n <= 64) { set('count', n); set('names', makePlayers(n, s.names)) }
   }
-  const updateName = (i, v) => set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
-  const clearNames = () => set('names', s.names.map(p => ({ ...p, name: '' })))
+  const updateName  = (i, v) => set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
+  const clearNames  = () => set('names', s.names.map(p => ({ ...p, name: '' })))
 
   // ── Group helpers ──
-  const activeGroup = s.groupSetups.find(g => g.id === s.activeGroupId)
-  const isActiveGenerated = activeGroup ? history.some(h => h.id === activeGroup.id) : false
+  const activeGroup        = s.groupSetups.find(g => g.id === s.activeGroupId)
+  const isActiveGenerated  = activeGroup ? history.some(h => h.id === activeGroup.id) : false
 
   const handleCreateGroup = () => {
     if (s.groupSetups.length >= 10) { alert('Maximum of 10 active setup cards reached!'); return }
     const title = prompt('Enter Tournament Title (e.g., U18 Boys):')
     if (!title) return
-    const newId = Date.now().toString()
+    const newId    = Date.now().toString()
     const newSetup = { id: newId, title, count: DEFAULT_COUNT, custom: String(DEFAULT_COUNT), size: 4, players: makePlayers(DEFAULT_COUNT) }
     set('groupSetups', [...s.groupSetups, newSetup])
     set('activeGroupId', newId)
@@ -152,7 +159,14 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
     updateActiveGroup({ players: activeGroup.players.map(p => ({ ...p, name: '' })) })
   }
 
-  const fmt = FORMATS.find(f => f.id === s.format)
+  // ── Regenerate (confirmed) ──
+  const doRegenerate = () => {
+    const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+    onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
+    setConfirmRegenerate(false)
+  }
+
+  const fmt           = FORMATS.find(f => f.id === s.format)
   const resolvedNames = s.names.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
 
   return (
@@ -204,7 +218,9 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
 
             {s.names.length > 0 && (
               <Section step="3" title="Names"
-                action={<button className="su-clear-btn" onClick={clearNames}>Clear all</button>}>
+                action={
+                  <button className="su-clear-btn" onClick={() => setConfirmClearNames(true)}>Clear all</button>
+                }>
                 <div className="su-names-grid">
                   {s.names.map((p, i) => (
                     <div key={p.id} className="su-name-row">
@@ -319,7 +335,9 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
 
                   {activeGroup.players.length > 0 && (
                     <Section step="4" title="Players & Tags"
-                      action={<button className="su-clear-btn" onClick={clearGroupNames}>Clear all</button>}>
+                      action={
+                        <button className="su-clear-btn" onClick={() => setConfirmClearGroup(true)}>Clear all</button>
+                      }>
                       <div className="su-tag-legend">
                         {TAGS.map(t => (
                           <span key={t} className="su-tag-legend-item">
@@ -361,10 +379,11 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                       })()}
                       <button className="su-gen-btn" onClick={() => {
                         if (isActiveGenerated) {
-                          if (!confirm('Regenerating will reset all match scores. Continue?')) return
+                          setConfirmRegenerate(true)
+                        } else {
+                          const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+                          onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
                         }
-                        const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
-                        onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
                       }}>
                         {isActiveGenerated ? 'Regenerate Groups' : 'Generate Groups'}
                       </button>
@@ -379,15 +398,49 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
       </AnimatePresence>
 
       <div className="su-reset-row">
-        <button className="su-reset-btn" onClick={clearAll}>Reset all setup data</button>
+        <button className="su-reset-btn" onClick={() => setConfirmReset(true)}>Reset all setup data</button>
       </div>
 
+      {/* ── Confirmation Modals ── */}
       <AnimatePresence>
         {confirmDeleteId && (
           <ConfirmModal
             msg="Delete this card and move the tournament results to History?"
+            confirmLabel="Archive"
             onConfirm={() => confirmDeleteGroupSetup(confirmDeleteId)}
             onCancel={() => setConfirmDeleteId(null)}
+          />
+        )}
+        {confirmReset && (
+          <ConfirmModal
+            msg="Reset ALL setup data? This clears every draft, name list and group configuration. Tournament history is kept."
+            confirmLabel="Reset"
+            onConfirm={() => { clearAll(); setConfirmReset(false) }}
+            onCancel={() => setConfirmReset(false)}
+          />
+        )}
+        {confirmClearNames && (
+          <ConfirmModal
+            msg="Clear all player names? The player slots stay but every name will be wiped."
+            confirmLabel="Clear"
+            onConfirm={() => { clearNames(); setConfirmClearNames(false) }}
+            onCancel={() => setConfirmClearNames(false)}
+          />
+        )}
+        {confirmClearGroup && (
+          <ConfirmModal
+            msg="Clear all player names in this group setup? Slots are kept but every name will be wiped."
+            confirmLabel="Clear"
+            onConfirm={() => { clearGroupNames(); setConfirmClearGroup(false) }}
+            onCancel={() => setConfirmClearGroup(false)}
+          />
+        )}
+        {confirmRegenerate && (
+          <ConfirmModal
+            msg="Regenerating will reset all match scores and results for this tournament. Continue?"
+            confirmLabel="Regenerate"
+            onConfirm={doRegenerate}
+            onCancel={() => setConfirmRegenerate(false)}
           />
         )}
       </AnimatePresence>
