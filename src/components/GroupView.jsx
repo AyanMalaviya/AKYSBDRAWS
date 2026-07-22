@@ -158,20 +158,13 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
 // Shows ALL players across ALL groups sorted by points.
 // User hand-picks who advances; default pre-selects top N.
 function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
-  // Build a flat sorted list of all players with their group & stats
   const allPlayers = useMemo(() => {
     const rows = []
     groups.forEach(g => {
       g.standings.forEach((s, rank) => {
-        rows.push({
-          ...s,
-          groupId:   g.id,
-          groupName: g.name,
-          rank,          // position within their group (0-based)
-        })
+        rows.push({ ...s, groupId: g.id, groupName: g.name, rank })
       })
     })
-    // Sort: points desc → scoreDiff desc → scoredFor desc → name asc
     rows.sort((a, b) =>
       (b.points    ?? 0) - (a.points    ?? 0) ||
       (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) ||
@@ -181,34 +174,17 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
     return rows
   }, [groups])
 
-  const [selected, setSelected] = useState(() => {
-    const top = new Set(allPlayers.slice(0, defaultCount).map(p => p.id))
-    return top
-  })
+  const [selected, setSelected] = useState(() => new Set(allPlayers.slice(0, defaultCount).map(p => p.id)))
 
-  const toggle = (id) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const selectTop = (n) => setSelected(new Set(allPlayers.slice(0, n).map(p => p.id)))
 
-  // Quick-select top N by points
-  const selectTop = (n) => {
-    setSelected(new Set(allPlayers.slice(0, n).map(p => p.id)))
-  }
-
-  const count     = selected.size
+  const count    = selected.size
   const hasScores = allPlayers.some(p => p.scoredFor > 0 || p.scoredAgainst > 0)
-  const posEmoji  = ['🏆','⭐','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣']
+  const posEmoji = ['🏆','⭐','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣']
 
-  // Quick-select presets that make sense given total player count
   const quickOptions = []
-  for (let n = 2; n <= Math.min(allPlayers.length - 1, 12); n += (allPlayers.length > 10 ? 2 : 1)) {
-    quickOptions.push(n)
-  }
+  for (let n = 2; n <= Math.min(allPlayers.length - 1, 12); n += (allPlayers.length > 10 ? 2 : 1)) quickOptions.push(n)
 
   return (
     <div className="modal-overlay" style={{ zIndex: 3000, alignItems: 'flex-start', paddingTop: 32 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -216,20 +192,8 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
         initial={{ opacity: 0, scale: 0.94, y: 24 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.94, y: 24 }}
-        style={{
-          background: 'rgba(16,14,31,0.98)',
-          border: '1px solid rgba(139,92,246,0.35)',
-          borderRadius: 20,
-          padding: '24px 0 0',
-          width: '100%',
-          maxWidth: 560,
-          maxHeight: 'calc(100vh - 80px)',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 0 60px rgba(139,92,246,0.18), 0 24px 64px rgba(0,0,0,0.7)',
-        }}
+        style={{ background: 'rgba(16,14,31,0.98)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 20, padding: '24px 0 0', width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 0 60px rgba(139,92,246,0.18), 0 24px 64px rgba(0,0,0,0.7)' }}
       >
-        {/* Header */}
         <div style={{ padding: '0 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
             <div>
@@ -238,87 +202,43 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', padding: 4, lineHeight: 1 }}>✕</button>
           </div>
-
-          {/* Count badge + quick-select row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            <div style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 99, padding: '4px 14px', fontSize: 13, fontWeight: 800, color: 'var(--purple-light)', flexShrink: 0 }}>
-              {count} selected
-            </div>
+            <div style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 99, padding: '4px 14px', fontSize: 13, fontWeight: 800, color: 'var(--purple-light)', flexShrink: 0 }}>{count} selected</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>Quick:</div>
             {quickOptions.map(n => (
-              <button key={n} onClick={() => selectTop(n)}
-                style={{ padding: '4px 11px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: count === n ? 'rgba(212,160,23,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${count === n ? 'rgba(212,160,23,0.5)' : 'rgba(255,255,255,0.1)'}`, color: count === n ? 'var(--gold-light)' : 'var(--muted)', transition: 'all 0.15s' }}
-              >Top {n}</button>
+              <button key={n} onClick={() => selectTop(n)} style={{ padding: '4px 11px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: count === n ? 'rgba(212,160,23,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${count === n ? 'rgba(212,160,23,0.5)' : 'rgba(255,255,255,0.1)'}`, color: count === n ? 'var(--gold-light)' : 'var(--muted)', transition: 'all 0.15s' }}>Top {n}</button>
             ))}
           </div>
         </div>
 
-        {/* Player list — scrollable */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
           {allPlayers.map((p, globalRank) => {
             const isSelected = selected.has(p.id)
-            const rankInGroup = p.rank
             return (
-              <button
-                key={p.id}
-                onClick={() => toggle(p.id)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 10, marginBottom: 6,
-                  cursor: 'pointer', textAlign: 'left',
-                  background: isSelected
-                    ? 'rgba(34,214,122,0.10)'
-                    : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${isSelected ? 'rgba(34,214,122,0.42)' : 'rgba(255,255,255,0.07)'}`,
-                  boxShadow: isSelected ? '0 0 12px rgba(34,214,122,0.09)' : 'none',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {/* Global rank */}
+              <button key={p.id} onClick={() => toggle(p.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, marginBottom: 6, cursor: 'pointer', textAlign: 'left', background: isSelected ? 'rgba(34,214,122,0.10)' : 'rgba(255,255,255,0.03)', border: `1px solid ${isSelected ? 'rgba(34,214,122,0.42)' : 'rgba(255,255,255,0.07)'}`, boxShadow: isSelected ? '0 0 12px rgba(34,214,122,0.09)' : 'none', transition: 'all 0.15s' }}>
                 <div style={{ width: 26, flexShrink: 0, textAlign: 'center', fontSize: 14 }}>
                   {isSelected ? (posEmoji[Array.from(selected).indexOf(p.id)] || '✅') : <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>#{globalRank + 1}</span>}
                 </div>
-
-                {/* Tag + Name */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                     <TinyTag tag={p.tag} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? 'var(--green)' : 'var(--white-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name}
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? 'var(--green)' : 'var(--white-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {p.groupName} · #{rankInGroup + 1} in group · {p.wins}W {p.draws}D {p.losses}L
+                    {p.groupName} · #{p.rank + 1} in group · {p.wins}W {p.draws}D {p.losses}L
                     {hasScores && p.scoreDiff != null ? ` · SD ${p.scoreDiff > 0 ? '+' : ''}${p.scoreDiff}` : ''}
                   </div>
                 </div>
-
-                {/* Points pill */}
-                <div style={{ flexShrink: 0, background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 13, fontWeight: 800, color: 'var(--gold-light)' }}>
-                  {p.points ?? 0} pts
-                </div>
-
-                {/* Check / circle */}
-                <div style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.18)'}`, background: isSelected ? 'rgba(34,214,122,0.25)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--green)', transition: 'all 0.15s' }}>
-                  {isSelected ? '✓' : ''}
-                </div>
+                <div style={{ flexShrink: 0, background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 13, fontWeight: 800, color: 'var(--gold-light)' }}>{p.points ?? 0} pts</div>
+                <div style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.18)'}`, background: isSelected ? 'rgba(34,214,122,0.25)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--green)', transition: 'all 0.15s' }}>{isSelected ? '✓' : ''}</div>
               </button>
             )
           })}
         </div>
 
-        {/* Footer actions */}
         <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-sm"
-            style={{ flex: 2, background: count === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(34,214,122,0.14)', border: `1px solid ${count === 0 ? 'var(--border2)' : 'rgba(34,214,122,0.45)'}`, color: count === 0 ? 'var(--muted)' : 'var(--green)', fontWeight: 800, fontSize: 14, opacity: count === 0 ? 0.5 : 1, cursor: count === 0 ? 'not-allowed' : 'pointer', padding: '10px 0' }}
-            disabled={count === 0}
-            onClick={() => {
-              const advancers = allPlayers.filter(p => selected.has(p.id))
-              onConfirm(advancers)
-            }}
-          >
+          <button className="btn btn-sm" style={{ flex: 2, background: count === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(34,214,122,0.14)', border: `1px solid ${count === 0 ? 'var(--border2)' : 'rgba(34,214,122,0.45)'}`, color: count === 0 ? 'var(--muted)' : 'var(--green)', fontWeight: 800, fontSize: 14, opacity: count === 0 ? 0.5 : 1, cursor: count === 0 ? 'not-allowed' : 'pointer', padding: '10px 0' }} disabled={count === 0} onClick={() => onConfirm(allPlayers.filter(p => selected.has(p.id)))}>
             Advance {count} Player{count !== 1 ? 's' : ''} →
           </button>
         </div>
@@ -455,15 +375,15 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
 }
 
 export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2 }) {
-  const [isEditing, setIsEditing]                 = useState(false)
-  const [draftGroups, setDraftGroups]             = useState(null)
-  const [showAdvancerModal, setShowAdvancerModal] = useState(false)
-  const [advancersPerGroup, setAdvancersPerGroup] = useState(2)
-  const [stage2Type, setStage2Type]               = useState('knockout')
-  const [confirmedAdvancers, setConfirmedAdvancers] = useState(null) // hand-picked list
-  const [showStage2Config, setShowStage2Config]   = useState(false)
+  const [isEditing, setIsEditing]                   = useState(false)
+  const [draftGroups, setDraftGroups]               = useState(null)
+  const [showAdvancerModal, setShowAdvancerModal]   = useState(false)
+  const [advancersPerGroup, setAdvancersPerGroup]   = useState(2)
+  const [stage2Type, setStage2Type]                 = useState('knockout')
+  const [confirmedAdvancers, setConfirmedAdvancers] = useState(null)
+  const [showStage2Config, setShowStage2Config]     = useState(false)
 
-  const gridRef = useRef(null)
+  const gridRef      = useRef(null)
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
   const maxAdvancers = useMemo(() => {
@@ -478,18 +398,18 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const handleSaveEdit   = () => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }
   const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
 
+  const resetStage2Flow = () => { setConfirmedAdvancers(null); setShowStage2Config(false); setShowAdvancerModal(false) }
+
   const handleUpdateMatch = (groupId, matchId, winner) => {
     const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResult(cleared, groupId, matchId, winner))
-    setConfirmedAdvancers(null)
-    setShowStage2Config(false)
+    resetStage2Flow()
   }
 
   const handleUpdateMatchWithScore = (groupId, matchId, s1, s2) => {
     const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResultWithScore(cleared, groupId, matchId, s1, s2))
-    setConfirmedAdvancers(null)
-    setShowStage2Config(false)
+    resetStage2Flow()
   }
 
   const handleEditAction = (action, groupId, playerId, payload) => {
@@ -509,6 +429,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     onGroupsUpdate(groups.map(g =>
       g.id === groupId ? { ...g, eliminatedIds: [...(g.eliminatedIds || []), playerId] } : g
     ))
+    resetStage2Flow()
   }
 
   const SCROLL_AMOUNT = 360
@@ -519,17 +440,27 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     g => g.matches.every(m => m.winner !== null) && g.matches.length > 0
   )
 
-  // Default advancer count: 2 per group capped at maxAdvancers * numGroups
+  const unresolvedGroups = useMemo(() => {
+    if (!allGroupsDone) return []
+    return groups.filter(g => {
+      const count = Math.min(safeAdvancers, g.players.length - 1 || 1)
+      const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(g, count)
+      const elims = g.eliminatedIds || []
+      const remainingTied = tied.filter(p => !elims.includes(p.id))
+      const slotsLeft = count - advancers.length
+      return needsTieBreak && remainingTied.length > slotsLeft
+    })
+  }, [allGroupsDone, groups, safeAdvancers])
+
+  const allTiesResolved = unresolvedGroups.length === 0
+
   const defaultSelectCount = useMemo(() => {
     const total = groups.reduce((sum, g) => sum + g.players.length, 0)
-    const perGroup = Math.min(2, maxAdvancers)
-    return Math.min(perGroup * groups.length, total - 1)
-  }, [groups, maxAdvancers])
+    return Math.max(1, Math.min(safeAdvancers * groups.length, total - 1))
+  }, [groups, safeAdvancers])
 
-  // The final list used for Stage 2 — either hand-picked or auto-computed
   const finalAdvancerList = useMemo(() => {
     if (confirmedAdvancers) return confirmedAdvancers
-    // Fallback auto-compute (used only if modal not yet opened)
     const rows = []
     groups.forEach(g => {
       g.standings.forEach((s, rank) => rows.push({ ...s, groupId: g.id, groupName: g.name, rank }))
@@ -550,19 +481,56 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   }
 
   const handleLaunchStage2 = () => {
-    if (onAdvanceToStage2) onAdvanceToStage2(finalAdvancerList, stage2Type)
+    if (confirmedAdvancers?.length && onAdvanceToStage2) onAdvanceToStage2(finalAdvancerList, stage2Type)
   }
 
   const posEmoji = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣']
 
   return (
     <div className="group-view" style={{ paddingTop: 10 }}>
-      {/* Edit mode toolbar */}
+      {/* ── Top control bar ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24, background: 'rgba(0,0,0,0.3)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border2)' }}>
         {!isEditing ? (
           <>
-            <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
-            <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
+            {/* Left side: navigation + edit */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
+              <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
+            </div>
+
+            {/* Right side: advancers-per-group stepper + Review button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7 }}>Advancing / Group</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.22)', borderRadius: 10, padding: '6px 8px' }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers <= 1 ? 0.45 : 1 }}
+                  disabled={safeAdvancers <= 1}
+                  onClick={() => { setAdvancersPerGroup(v => Math.max(1, v - 1)); resetStage2Flow() }}
+                >−</button>
+                <div style={{ minWidth: 30, textAlign: 'center', fontWeight: 800, color: 'var(--white-soft)' }}>{safeAdvancers}</div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers >= maxAdvancers ? 0.45 : 1 }}
+                  disabled={safeAdvancers >= maxAdvancers}
+                  onClick={() => { setAdvancersPerGroup(v => Math.min(maxAdvancers, v + 1)); resetStage2Flow() }}
+                >+</button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{defaultSelectCount} total by default</div>
+              <button
+                className="btn btn-sm"
+                style={{
+                  padding: '8px 14px',
+                  background: allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.09)' : 'rgba(255,255,255,0.05)',
+                  color: allGroupsDone && allTiesResolved ? 'var(--green)' : 'var(--muted)',
+                  border: `1px solid ${allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                  opacity: allGroupsDone && allTiesResolved ? 1 : 0.55,
+                  cursor: allGroupsDone && allTiesResolved ? 'pointer' : 'not-allowed',
+                }}
+                disabled={!allGroupsDone || !allTiesResolved}
+                onClick={() => setShowAdvancerModal(true)}
+              >🏆 Review Advancers</button>
+            </div>
           </>
         ) : (
           <>
@@ -585,13 +553,19 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         </motion.div>
       )}
 
-      {/* ── Group Stage Complete summary ── */}
+      {/* ── Group Stage Complete summary ─────────────────────────────── */}
       <AnimatePresence>
         {allGroupsDone && !isEditing && (
           <motion.div className="gv-summary" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="gv-summary-title">🎉 Group Stage Complete</div>
 
-            {/* Per-group advancers list */}
+            {!allTiesResolved ? (
+              <div className="gv-summary-notice">⚠️ Resolve tie-breaks inside the affected groups before confirming advancers.</div>
+            ) : (
+              <div className="gv-summary-subtitle">Choose how many advance per group in the top bar, then review and confirm the final Stage 2 list.</div>
+            )}
+
+            {/* Per-group advancers preview */}
             <div className="gv-summary-list">
               {groups.map(g => {
                 const count2 = Math.min(safeAdvancers, g.players.length - 1 || 1)
@@ -612,15 +586,18 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                         <span className="gv-summary-pts">{g.standings.find(s => s.id === p.id)?.points ?? 0} pts</span>
                       </div>
                     ))}
+                    {needsTieBreak && remainingTied.length > slotsLeft && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--gold-light)', fontWeight: 700 }}>Boundary tie still unresolved</div>
+                    )}
                   </div>
                 )
               })}
             </div>
 
-            {/* If advancers already confirmed, show them */}
-            {confirmedAdvancers && (
+            {/* Confirmed advancers chip list */}
+            {confirmedAdvancers ? (
               <div style={{ background: 'rgba(34,214,122,0.07)', border: '1px solid rgba(34,214,122,0.28)', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>✅ {confirmedAdvancers.length} Players Confirmed for Stage 2</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>✅ Final Advancers Confirmed ({confirmedAdvancers.length})</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {confirmedAdvancers.map((p, i) => (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(34,214,122,0.25)', borderRadius: 8, padding: '4px 10px', fontSize: 12 }}>
@@ -633,17 +610,14 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                 </div>
                 <button onClick={() => setShowAdvancerModal(true)} style={{ marginTop: 10, background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--muted)', fontSize: 12, padding: '5px 12px', borderRadius: 7, cursor: 'pointer' }}>✏️ Change selection</button>
               </div>
-            )}
+            ) : allTiesResolved ? (
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                Default advancers are ready based on the current setting. Use <strong style={{ color: 'var(--white-soft)' }}>Review Advancers</strong> in the top bar to confirm or customise before Stage 2 can be created.
+              </div>
+            ) : null}
 
-            {/* CTA */}
-            {!showStage2Config && !hasStage2 && (
-              <button className="gv-confirm-btn" onClick={() => setShowAdvancerModal(true)}>
-                🏆 Select Advancers ({groups.reduce((s, g) => s + g.players.length, 0)} players)
-              </button>
-            )}
-
-            {/* Stage 2 format config — shown after advancers confirmed */}
-            {(showStage2Config || hasStage2) && (
+            {/* Stage 2 format config — appears after advancers confirmed */}
+            {(showStage2Config || hasStage2) && confirmedAdvancers && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div>
