@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, memo } from 'react'
+import React, { useState, useMemo, useRef, memo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   TAG_META,
@@ -384,6 +384,13 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const [showStage2Config, setShowStage2Config]     = useState(false)
 
   const gridRef      = useRef(null)
+  
+  // FIX: Track the latest 'groups' state via a ref. This is required because 
+  // the children (MatchRow) are heavily memoized. If we don't do this, the
+  // update functions suffer from a stale closure and overwrite old tournament data.
+  const groupsRef    = useRef(groups)
+  groupsRef.current  = groups
+
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
   // Max the stepper can go = largest group size - 1
@@ -404,19 +411,28 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const handleSaveEdit   = () => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }
   const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
 
-  const resetStage2Flow = () => { setConfirmedAdvancers(null); setShowStage2Config(false); setShowAdvancerModal(false) }
+  // FIX: Stabilize reset logic so it can be safely used inside the dependency arrays
+  const resetStage2Flow = useCallback(() => { 
+    setConfirmedAdvancers(null); 
+    setShowStage2Config(false); 
+    setShowAdvancerModal(false); 
+  }, [])
 
-  const handleUpdateMatch = (groupId, matchId, winner) => {
-    const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
+  // FIX: Use useCallback and reach for groupsRef.current instead of 'groups' directly.
+  // This completely solves the bug where clicking a new winner removed previous winners.
+  const handleUpdateMatch = useCallback((groupId, matchId, winner) => {
+    const currentGroups = groupsRef.current;
+    const cleared = currentGroups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResult(cleared, groupId, matchId, winner))
     resetStage2Flow()
-  }
+  }, [onGroupsUpdate, resetStage2Flow])
 
-  const handleUpdateMatchWithScore = (groupId, matchId, s1, s2) => {
-    const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
+  const handleUpdateMatchWithScore = useCallback((groupId, matchId, s1, s2) => {
+    const currentGroups = groupsRef.current;
+    const cleared = currentGroups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResultWithScore(cleared, groupId, matchId, s1, s2))
     resetStage2Flow()
-  }
+  }, [onGroupsUpdate, resetStage2Flow])
 
   const handleEditAction = (action, groupId, playerId, payload) => {
     let next = draftGroups
@@ -431,12 +447,13 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
 
-  const handleEliminate = (groupId, playerId) => {
-    onGroupsUpdate(groups.map(g =>
+  const handleEliminate = useCallback((groupId, playerId) => {
+    const currentGroups = groupsRef.current;
+    onGroupsUpdate(currentGroups.map(g =>
       g.id === groupId ? { ...g, eliminatedIds: [...(g.eliminatedIds || []), playerId] } : g
     ))
     resetStage2Flow()
-  }
+  }, [onGroupsUpdate, resetStage2Flow])
 
   const SCROLL_AMOUNT = 360
   const scrollLeft  = () => gridRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' })
