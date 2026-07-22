@@ -155,8 +155,6 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
 }
 
 // ── Select Advancers Modal ────────────────────────────────────────────
-// Shows ALL players across ALL groups sorted by points.
-// User hand-picks who advances; default pre-selects top N.
 function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
   const allPlayers = useMemo(() => {
     const rows = []
@@ -256,7 +254,9 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
   const pct     = total ? Math.round((done / total) * 100) : 0
   const allDone = done === total && total > 0
 
-  const count = advancersPerGroup || 2
+  // Clamp per-group: can never advance more than (this group's players - 1)
+  const maxForThisGroup = Math.max(1, group.players.length - 1)
+  const count = Math.min(advancersPerGroup || 2, maxForThisGroup)
 
   const { advancers, tied, needsTieBreak } = allDone
     ? getGroupAdvancerInfo(group, count)
@@ -294,7 +294,7 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
         ) : (
           <div className="gc-title-row">
             <span className="gc-name" style={{ color: 'var(--purple-light)' }}>{group.name}</span>
-            <span className="gc-count">{group.players.length} players · top {Math.min(count, group.players.length - 1 || count)} advance</span>
+            <span className="gc-count">{group.players.length} players · top {count} advance</span>
           </div>
         )}
         {!isEditing && (
@@ -386,12 +386,15 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const gridRef      = useRef(null)
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
+  // Max the stepper can go = largest group size - 1
+  // (smaller groups automatically clamp their own count inside GroupCard)
   const maxAdvancers = useMemo(() => {
     if (!groups.length) return 4
-    const minSize = Math.min(...groups.map(g => g.players.length))
-    return Math.max(1, minSize - 1)
+    const maxSize = Math.max(...groups.map(g => g.players.length))
+    return Math.max(1, maxSize - 1)
   }, [groups])
 
+  // safeAdvancers is what the stepper shows; per-group clamping happens inside GroupCard
   const safeAdvancers = Math.min(advancersPerGroup, maxAdvancers)
 
   const handleStartEdit  = () => { setDraftGroups(JSON.parse(JSON.stringify(groups))); setIsEditing(true) }
@@ -443,7 +446,8 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const unresolvedGroups = useMemo(() => {
     if (!allGroupsDone) return []
     return groups.filter(g => {
-      const count = Math.min(safeAdvancers, g.players.length - 1 || 1)
+      const maxForG = Math.max(1, g.players.length - 1)
+      const count = Math.min(safeAdvancers, maxForG)
       const { advancers, tied, needsTieBreak } = getGroupAdvancerInfo(g, count)
       const elims = g.eliminatedIds || []
       const remainingTied = tied.filter(p => !elims.includes(p.id))
@@ -456,7 +460,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   const defaultSelectCount = useMemo(() => {
     const total = groups.reduce((sum, g) => sum + g.players.length, 0)
-    return Math.max(1, Math.min(safeAdvancers * groups.length, total - 1))
+    const effectiveTotal = groups.reduce((sum, g) => {
+      return sum + Math.min(safeAdvancers, Math.max(1, g.players.length - 1))
+    }, 0)
+    return Math.max(1, Math.min(effectiveTotal, total - 1))
   }, [groups, safeAdvancers])
 
   const finalAdvancerList = useMemo(() => {
@@ -568,7 +575,8 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             {/* Per-group advancers preview */}
             <div className="gv-summary-list">
               {groups.map(g => {
-                const count2 = Math.min(safeAdvancers, g.players.length - 1 || 1)
+                const maxForG = Math.max(1, g.players.length - 1)
+                const count2 = Math.min(safeAdvancers, maxForG)
                 const { advancers: adv, tied, needsTieBreak } = getGroupAdvancerInfo(g, count2)
                 const elims = g.eliminatedIds || []
                 const remainingTied = tied.filter(p => !elims.includes(p.id))
