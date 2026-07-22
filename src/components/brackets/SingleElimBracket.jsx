@@ -67,7 +67,7 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
       })
     })
     setLines(newLines)
-  })
+  }, [bracket]) // <-- FIX: Dependency array added to stop the infinite loop
 
   const total = bracket.rounds.length
 

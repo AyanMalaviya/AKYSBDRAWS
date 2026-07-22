@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
+import { produce } from 'immer'
 import MatchCard from '../MatchCard.jsx'
 import { advanceWinnerDE, advanceLoserDE, advanceGrandFinalDE } from '../../engine/bracketEngine.js'
 
@@ -34,7 +35,7 @@ function BracketSection({ label, labelClass, rounds, onWin }) {
       })
     })
     setLines(newLines)
-  })
+  }, [rounds]) // <-- FIX: Dependency array added here too
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -63,10 +64,9 @@ function BracketSection({ label, labelClass, rounds, onWin }) {
 export default function DoubleElimBracket({ bracket, onUpdate }) {
   const handleWinW = (rIdx, mIdx, winner) => {
     if (winner === null) {
-      // Simple undo: clear winner only
-      const b = JSON.parse(JSON.stringify(bracket))
-      b.wRounds[rIdx][mIdx].winner = null
-      onUpdate(b)
+      onUpdate(produce(bracket, draft => {
+        draft.wRounds[rIdx][mIdx].winner = null
+      }))
     } else {
       onUpdate(advanceWinnerDE(bracket, rIdx, mIdx, winner))
     }
@@ -74,9 +74,9 @@ export default function DoubleElimBracket({ bracket, onUpdate }) {
 
   const handleWinL = (rIdx, mIdx, winner) => {
     if (winner === null) {
-      const b = JSON.parse(JSON.stringify(bracket))
-      b.lRounds[rIdx][mIdx].winner = null
-      onUpdate(b)
+      onUpdate(produce(bracket, draft => {
+        draft.lRounds[rIdx][mIdx].winner = null
+      }))
     } else {
       onUpdate(advanceLoserDE(bracket, rIdx, mIdx, winner))
     }
@@ -84,9 +84,10 @@ export default function DoubleElimBracket({ bracket, onUpdate }) {
 
   const handleGF = (winner) => {
     if (winner === null) {
-      const b = JSON.parse(JSON.stringify(bracket))
-      b.grandFinal.winner = null; b.champion = null
-      onUpdate(b)
+      onUpdate(produce(bracket, draft => {
+        draft.grandFinal.winner = null
+        draft.champion = null
+      }))
     } else {
       onUpdate(advanceGrandFinalDE(bracket, winner))
     }

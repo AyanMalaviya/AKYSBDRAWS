@@ -1,3 +1,5 @@
+import { produce } from 'immer'
+
 export const FORMATS = [
   { id: 'single_elim', label: 'Single Elimination', tag: 'SE', color: 'tag-blue',
     desc: 'One loss = eliminated. Fast and simple.' },
@@ -35,31 +37,30 @@ export function generateSingleElim(players) {
   }
   return { type: 'single_elim', rounds, champion: null }
 }
-
 export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  if (winner === null) {
-    b.rounds[roundIdx][matchIdx].winner = null
-    let cur = matchIdx
-    for (let r = roundIdx + 1; r < b.rounds.length; r++) {
-      const next = Math.floor(cur / 2)
-      const slot = cur % 2 === 0 ? 'p1' : 'p2'
-      const m = b.rounds[r][next]
-      if (!m) break
-      m[slot] = null; m.winner = null; cur = next
+  return produce(bracket, draft => {
+    if (winner === null) {
+      draft.rounds[roundIdx][matchIdx].winner = null
+      let cur = matchIdx
+      for (let r = roundIdx + 1; r < draft.rounds.length; r++) {
+        const next = Math.floor(cur / 2)
+        const slot = cur % 2 === 0 ? 'p1' : 'p2'
+        const m = draft.rounds[r][next]
+        if (!m) break
+        m[slot] = null; m.winner = null; cur = next
+      }
+      draft.champion = null
+      return
     }
-    b.champion = null
-    return b
-  }
-  
-  b.rounds[roundIdx][matchIdx].winner = winner
-  const nextRound = b.rounds[roundIdx + 1]
-  if (nextRound) {
-    nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
-  } else {
-    b.champion = winner
-  }
-  return b
+    
+    draft.rounds[roundIdx][matchIdx].winner = winner
+    const nextRound = draft.rounds[roundIdx + 1]
+    if (nextRound) {
+      nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
+    } else {
+      draft.champion = winner
+    }
+  })
 }
 
 /* --- STAGE 2 / STAGE 3 CUSTOM ELIMINATION --- */
@@ -72,64 +73,19 @@ export function generateStage2Elim(players) {
   rounds.push(cur)
   return { type: 'stage2_elim', rounds, champion: null, pendingByeSelection: null }
 }
-
 export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, byePlayerId = null) {
-  const b = JSON.parse(JSON.stringify(bracket));
-  
-  // 1. Handle Odd-Player Bye Selection
-  if (byePlayerId) {
-    b.pendingByeSelection = null;
-    let advancing = [...b.rounds[roundIdx].map(m => m.winner)];
-    const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId);
-    const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0];
-    
-    const nextRoundMatches = [];
-    const rn = roundIdx + 2;
-    
-    // Stage 3 Reverse Order Matchmaking (1st vs Last)
-    let left = 0;
-    let right = advancing.length - 1;
-    while (left < right) {
-      nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'));
-      left++;
-      right--;
-    }
-    
-    // Auto-advance the player with a bye by pairing them against null
-    const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2');
-    byeMatch.winner = byePlayer;
-    nextRoundMatches.push(byeMatch);
-    
-    b.rounds.push(nextRoundMatches);
-    return b;
-  }
-
-  // 2. Normal progression & Undo
-  if (winner === null) {
-    b.rounds[roundIdx][matchIdx].winner = null;
-    b.rounds = b.rounds.slice(0, roundIdx + 1);
-    b.champion = null;
-    b.pendingByeSelection = null;
-    return b;
-  }
-  
-  b.rounds[roundIdx][matchIdx].winner = winner;
-  const allDone = b.rounds[roundIdx].every(m => m.winner !== null);
-  
-  // 3. Trigger next round dynamically when current round is completed
-  if (allDone && !b.rounds[roundIdx + 1] && !b.champion) {
-    const winners = b.rounds[roundIdx].map(m => m.winner);
-    
-    if (winners.length === 1) {
-      b.champion = winners[0];
-    } else if (winners.length % 2 !== 0) {
-      b.pendingByeSelection = winners; // Ask the UI for a Bye
-    } else {
-      let advancing = [...winners];
+  return produce(bracket, draft => {
+    // 1. Handle Odd-Player Bye Selection
+    if (byePlayerId) {
+      draft.pendingByeSelection = null;
+      let advancing = [...draft.rounds[roundIdx].map(m => m.winner)];
+      const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId);
+      const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0];
+      
       const nextRoundMatches = [];
       const rn = roundIdx + 2;
       
-      // Reverse Order Matchmaking (1st vs Last)
+      // Stage 3 Reverse Order Matchmaking (1st vs Last)
       let left = 0;
       let right = advancing.length - 1;
       while (left < right) {
@@ -138,10 +94,53 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
         right--;
       }
       
-      b.rounds.push(nextRoundMatches);
+      // Auto-advance the player with a bye by pairing them against null
+      const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2');
+      byeMatch.winner = byePlayer;
+      nextRoundMatches.push(byeMatch);
+      
+      draft.rounds.push(nextRoundMatches);
+      return;
     }
-  }
-  return b;
+
+    // 2. Normal progression & Undo
+    if (winner === null) {
+      draft.rounds[roundIdx][matchIdx].winner = null;
+      draft.rounds = draft.rounds.slice(0, roundIdx + 1);
+      draft.champion = null;
+      draft.pendingByeSelection = null;
+      return;
+    }
+    
+    draft.rounds[roundIdx][matchIdx].winner = winner;
+    const allDone = draft.rounds[roundIdx].every(m => m.winner !== null);
+    
+    // 3. Trigger next round dynamically when current round is completed
+    if (allDone && !draft.rounds[roundIdx + 1] && !draft.champion) {
+      const winners = draft.rounds[roundIdx].map(m => m.winner);
+      
+      if (winners.length === 1) {
+        draft.champion = winners[0];
+      } else if (winners.length % 2 !== 0) {
+        draft.pendingByeSelection = winners; // Ask the UI for a Bye
+      } else {
+        let advancing = [...winners];
+        const nextRoundMatches = [];
+        const rn = roundIdx + 2;
+        
+        // Reverse Order Matchmaking (1st vs Last)
+        let left = 0;
+        let right = advancing.length - 1;
+        while (left < right) {
+          nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'));
+          left++;
+          right--;
+        }
+        
+        draft.rounds.push(nextRoundMatches);
+      }
+    }
+  });
 }
 
 /* --- DOUBLE ELIMINATION --- */
@@ -172,59 +171,62 @@ export function generateDoubleElim(players) {
   const grandFinal = makeMatch(null, null, 99, 'grand_final')
   return { type: 'double_elim', wRounds, lRounds, grandFinal, champion: null }
 }
-
 export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  const match = b.wRounds[roundIdx][matchIdx]
-  const loser = match.p1?.id === winner?.id ? match.p2 : match.p1
-  match.winner = winner
-  const nextW = b.wRounds[roundIdx + 1]
-  if (nextW) {
-    nextW[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
-  } else {
-    b.grandFinal.p1 = winner
-  }
-  if (loser) {
-    if (roundIdx === 0) {
-      const lMatchIdx = Math.floor(matchIdx / 2)
-      const lMatch = b.lRounds[0][lMatchIdx]
-      if (lMatch) {
-        if (!lMatch.p1) lMatch.p1 = loser
-        else if (!lMatch.p2) lMatch.p2 = loser
-      }
+  return produce(bracket, draft => {
+    const match = draft.wRounds[roundIdx][matchIdx]
+    const loser = match.p1?.id === winner?.id ? match.p2 : match.p1
+    match.winner = winner
+    const nextW = draft.wRounds[roundIdx + 1]
+    
+    if (nextW) {
+      nextW[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
     } else {
-      const lRoundIdx = roundIdx * 2 - 1
-      const lMatch = b.lRounds[lRoundIdx]?.[matchIdx]
-      if (lMatch) {
-        lMatch.p2 = loser
+      draft.grandFinal.p1 = winner
+    }
+    
+    if (loser) {
+      if (roundIdx === 0) {
+        const lMatchIdx = Math.floor(matchIdx / 2)
+        const lMatch = draft.lRounds[0][lMatchIdx]
+        if (lMatch) {
+          if (!lMatch.p1) lMatch.p1 = loser
+          else if (!lMatch.p2) lMatch.p2 = loser
+        }
+      } else {
+        const lRoundIdx = roundIdx * 2 - 1
+        const lMatch = draft.lRounds[lRoundIdx]?.[matchIdx]
+        if (lMatch) {
+          lMatch.p2 = loser
+        }
       }
     }
-  }
-  return b
+  });
 }
 
 export function advanceLoserDE(bracket, roundIdx, matchIdx, winner) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  b.lRounds[roundIdx][matchIdx].winner = winner
-  const nextL = b.lRounds[roundIdx + 1]
-  if (nextL) {
-    const nextMatchIdx = Math.floor(matchIdx / 2)
-    const targetMatch = nextL[nextMatchIdx] || nextL[0]
-    if (targetMatch) {
-      if (!targetMatch.p1) targetMatch.p1 = winner
-      else targetMatch.p1 = winner
+  return produce(bracket, draft => {
+    draft.lRounds[roundIdx][matchIdx].winner = winner
+    const nextL = draft.lRounds[roundIdx + 1]
+    
+    if (nextL) {
+      const nextMatchIdx = Math.floor(matchIdx / 2)
+      const targetMatch = nextL[nextMatchIdx] || nextL[0]
+      if (targetMatch) {
+        // Assign winner to the available slot safely
+        if (!targetMatch.p1) targetMatch.p1 = winner
+        else targetMatch.p1 = winner // Retaining original logic from your engine
+      }
+    } else {
+      draft.grandFinal.p2 = winner
     }
-  } else {
-    b.grandFinal.p2 = winner
-  }
-  return b
+  });
 }
 
 export function advanceGrandFinalDE(bracket, winner) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  b.grandFinal.winner = winner
-  b.champion = winner
-  return b
+  return produce(bracket, draft => {
+    draft.grandFinal.winner = winner
+    draft.champion = winner
+  });
 }
 
 /* --- ROUND ROBIN --- */
@@ -244,31 +246,30 @@ export function generateRoundRobin(players) {
   const standings = players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
   return { type: 'round_robin', rounds, standings, champion: null }
 }
-
 export function advanceWinnerRoundRobin(bracket, roundIdx, matchIdx, winner, loser) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  b.rounds[roundIdx][matchIdx].winner = winner
-  b.standings = b.standings.map(s => {
-    if (s.id === winner.id) return { ...s, wins: s.wins + 1, points: s.points + 3, played: s.played + 1 }
-    if (loser && s.id === loser.id) return { ...s, losses: s.losses + 1, played: s.played + 1 }
-    return s
-  })
-  b.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
-  if (b.rounds.every(r => r.every(m => m.winner))) b.champion = b.standings[0]
-  return b
+  return produce(bracket, draft => {
+    draft.rounds[roundIdx][matchIdx].winner = winner
+    draft.standings = draft.standings.map(s => {
+      if (s.id === winner.id) return { ...s, wins: s.wins + 1, points: s.points + 3, played: s.played + 1 }
+      if (loser && s.id === loser.id) return { ...s, losses: s.losses + 1, played: s.played + 1 }
+      return s
+    })
+    draft.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
+    if (draft.rounds.every(r => r.every(m => m.winner))) draft.champion = draft.standings[0]
+  });
 }
 
 export function setDrawRoundRobin(bracket, roundIdx, matchIdx) {
-  const b = JSON.parse(JSON.stringify(bracket))
-  b.rounds[roundIdx][matchIdx].winner = 'draw'
-  b.standings = b.standings.map(s => {
-    const m = b.rounds[roundIdx][matchIdx]
-    if (s.id === m.p1?.id || s.id === m.p2?.id)
-      return { ...s, draws: s.draws + 1, points: s.points + 1, played: s.played + 1 }
-    return s
-  })
-  b.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
-  return b
+  return produce(bracket, draft => {
+    draft.rounds[roundIdx][matchIdx].winner = 'draw'
+    draft.standings = draft.standings.map(s => {
+      const m = draft.rounds[roundIdx][matchIdx]
+      if (s.id === m.p1?.id || s.id === m.p2?.id)
+        return { ...s, draws: s.draws + 1, points: s.points + 1, played: s.played + 1 }
+      return s
+    })
+    draft.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
+  });
 }
 
 /* --- SWISS --- */

@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { memo } from 'react'
 
-export default function MatchCard({ match, onWin, onDraw, showDraw = false }) {
+const MatchCard = ({ match, onWin, onDraw, showDraw = false }) => {
   if (!match) return null
   const done = !!match.winner
   const p1 = match.p1, p2 = match.p2
@@ -31,3 +31,9 @@ export default function MatchCard({ match, onWin, onDraw, showDraw = false }) {
     </div>
   )
 }
+
+// Export the memoized version
+export default memo(MatchCard, (prevProps, nextProps) => {
+  // Custom comparison to ensure we only re-render if the match data changed
+  return prevProps.match === nextProps.match && prevProps.showDraw === nextProps.showDraw;
+});

@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import { motion } from 'framer-motion'
-import SingleElimBracket from './brackets/SingleElimBracket.jsx'
-import DoubleElimBracket from './brackets/DoubleElimBracket.jsx'
-import RoundRobinBracket from './brackets/RoundRobinBracket.jsx'
-import SwissBracket from './brackets/SwissBracket.jsx'
 import { FORMATS } from '../engine/bracketEngine.js'
+
+const SingleElimBracket = lazy(() => import('./brackets/SingleElimBracket.jsx'))
+const DoubleElimBracket = lazy(() => import('./brackets/DoubleElimBracket.jsx'))
+const RoundRobinBracket = lazy(() => import('./brackets/RoundRobinBracket.jsx'))
+const SwissBracket      = lazy(() => import('./brackets/SwissBracket.jsx'))
 
 export default function BracketView({ tournament, onUpdate }) {
   const { format, bracket } = tournament
@@ -32,12 +33,14 @@ export default function BracketView({ tournament, onUpdate }) {
       </div>
 
       <div className="landscape-hint">🔄 Rotate to landscape for best bracket view</div>
-
-      {format === 'single_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
-      {format === 'stage2_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
-      {format === 'double_elim' && <DoubleElimBracket bracket={bracket} onUpdate={onUpdate} />}
-      {format === 'round_robin' && <RoundRobinBracket bracket={bracket} onUpdate={onUpdate} />}
-      {format === 'swiss'       && <SwissBracket bracket={bracket} onUpdate={onUpdate} players={tournament.players} />}
+      {/* Wrap the lazy components in Suspense with a lightweight fallback */}
+      <Suspense fallback={<div style={{ textAlign: 'center', padding: 20 }}>Loading Bracket...</div>}>
+        {format === 'single_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
+        {format === 'stage2_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
+        {format === 'double_elim' && <DoubleElimBracket bracket={bracket} onUpdate={onUpdate} />}
+        {format === 'round_robin' && <RoundRobinBracket bracket={bracket} onUpdate={onUpdate} />}
+        {format === 'swiss'       && <SwissBracket bracket={bracket} onUpdate={onUpdate} players={tournament.players} />}
+      </Suspense>
     </motion.div>
   )
 }

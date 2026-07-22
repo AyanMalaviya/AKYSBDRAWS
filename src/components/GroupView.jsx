@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo, useRef, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   TAG_META,
@@ -69,7 +69,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
 }
 
 // ── Match Row ─────────────────────────────────────────────────────────
-function MatchRow({ match, onResult, onScoreEntry }) {
+const MatchRow = memo(function MatchRow({ match, onResult, onScoreEntry }) {
   const isDone = !!match.winner
   const hasScore = match.score1 != null && match.score2 != null
   return (
@@ -89,7 +89,7 @@ function MatchRow({ match, onResult, onScoreEntry }) {
       <button className={`gm-draw${match.winner === 'draw' ? ' gm-win' : ''}`} onClick={() => onResult(match.winner === 'draw' ? null : 'draw')} title="Mark as draw">D</button>
     </div>
   )
-}
+}, (prev, next) => prev.match === next.match)
 
 // ── Standings Table ───────────────────────────────────────────────────
 function StandingsTable({ standings, advancerIds, tiedIds }) {
@@ -397,7 +397,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   // safeAdvancers is what the stepper shows; per-group clamping happens inside GroupCard
   const safeAdvancers = Math.min(advancersPerGroup, maxAdvancers)
 
-  const handleStartEdit  = () => { setDraftGroups(JSON.parse(JSON.stringify(groups))); setIsEditing(true) }
+  const handleStartEdit = () => { 
+    setDraftGroups(structuredClone(groups));
+    setIsEditing(true); 
+  }
   const handleSaveEdit   = () => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }
   const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
 

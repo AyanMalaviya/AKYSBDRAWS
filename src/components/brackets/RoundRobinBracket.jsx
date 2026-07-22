@@ -1,4 +1,5 @@
 import React from 'react'
+import { produce } from 'immer'
 import MatchCard from '../MatchCard.jsx'
 import { advanceWinnerRoundRobin, setDrawRoundRobin } from '../../engine/bracketEngine.js'
 
@@ -30,22 +31,23 @@ const Standings = ({ standings, champion }) => (
 export default function RoundRobinBracket({ bracket, onUpdate }) {
   const handleWin = (rIdx, mIdx, winner, loser) => {
     if (winner === null) {
-      const b = JSON.parse(JSON.stringify(bracket))
-      const m = b.rounds[rIdx][mIdx]
-      if (m.winner && m.winner !== 'draw') {
-        b.standings = b.standings.map(s => {
-          if (s.id === m.winner.id) return {...s, wins:s.wins-1, points:s.points-3, played:s.played-1}
-          const lid = m.winner.id === m.p1.id ? m.p2.id : m.p1.id
-          if (s.id === lid) return {...s, losses:s.losses-1, played:s.played-1}
-          return s
-        })
-      } else if (m.winner === 'draw') {
-        b.standings = b.standings.map(s => {
-          if (s.id === m.p1?.id || s.id === m.p2?.id) return {...s, draws:s.draws-1, points:s.points-1, played:s.played-1}
-          return s
-        })
-      }
-      m.winner = null; b.champion = null; onUpdate(b)
+      onUpdate(produce(bracket, draft => {
+        const m = draft.rounds[rIdx][mIdx]
+        if (m.winner && m.winner !== 'draw') {
+          draft.standings = draft.standings.map(s => {
+            if (s.id === m.winner.id) return {...s, wins:s.wins-1, points:s.points-3, played:s.played-1}
+            const lid = m.winner.id === m.p1.id ? m.p2.id : m.p1.id
+            if (s.id === lid) return {...s, losses:s.losses-1, played:s.played-1}
+            return s
+          })
+        } else if (m.winner === 'draw') {
+          draft.standings = draft.standings.map(s => {
+            if (s.id === m.p1?.id || s.id === m.p2?.id) return {...s, draws:s.draws-1, points:s.points-1, played:s.played-1}
+            return s
+          })
+        }
+        m.winner = null; draft.champion = null;
+      }))
     } else {
       onUpdate(advanceWinnerRoundRobin(bracket, rIdx, mIdx, winner, loser))
     }

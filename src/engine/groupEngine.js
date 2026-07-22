@@ -26,10 +26,10 @@ function makeRoundRobin(players, groupId) {
   }
   return matches
 }
-
 export function recomputeGroup(g) {
   const idealMatches = makeRoundRobin(g.players, g.id)
   const oldMatches   = g.matches || []
+  
   const newMatches = idealMatches.map(ideal => {
     const existing = oldMatches.find(m =>
       (m.p1.id === ideal.p1.id && m.p2.id === ideal.p2.id) ||
@@ -37,15 +37,29 @@ export function recomputeGroup(g) {
     )
     if (existing) {
       const flipped = existing.p1.id === ideal.p2.id
-      return {
-        ...existing,
-        p1: g.players.find(p => p.id === ideal.p1.id) || ideal.p1,
-        p2: g.players.find(p => p.id === ideal.p2.id) || ideal.p2,
-        score1: flipped ? existing.score2 : existing.score1,
-        score2: flipped ? existing.score1 : existing.score2,
-        winner: existing.winner === 'draw' ? 'draw'
-          : (existing.winner ? g.players.find(p => p.id === existing.winner.id) || null : null),
+      const p1 = g.players.find(p => p.id === ideal.p1.id) || ideal.p1
+      const p2 = g.players.find(p => p.id === ideal.p2.id) || ideal.p2
+      const score1 = flipped ? existing.score2 : existing.score1
+      const score2 = flipped ? existing.score1 : existing.score2
+      const winner = existing.winner === 'draw' ? 'draw'
+        : (existing.winner ? g.players.find(p => p.id === existing.winner.id) || null : null)
+
+      // FIX: Check if data is identical. If so, return the exact same memory reference.
+      // This activates React.memo in the UI and stops unnecessary re-renders.
+      const winnerMatched = (existing.winner === 'draw' && winner === 'draw') || 
+                            (existing.winner?.id === winner?.id);
+
+      if (
+        existing.p1.id === p1.id && existing.p1.name === p1.name && existing.p1.tag === p1.tag &&
+        existing.p2.id === p2.id && existing.p2.name === p2.name && existing.p2.tag === p2.tag &&
+        existing.score1 === score1 &&
+        existing.score2 === score2 &&
+        winnerMatched
+      ) {
+        return existing; 
       }
+
+      return { ...existing, p1, p2, score1, score2, winner }
     }
     return ideal
   })
@@ -79,7 +93,6 @@ export function recomputeGroup(g) {
 
   standings.forEach(s => { s.scoreDiff = s.scoredFor - s.scoredAgainst })
 
-  // Sort: points → scoreDiff → scoredFor → name
   standings.sort((a, b) =>
     (b.points    - a.points)    ||
     (b.scoreDiff - a.scoreDiff) ||
