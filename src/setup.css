@@ -1,0 +1,532 @@
+/* ── Setup page styles ─────────────────────────────────────────
+   Import DM Mono for a distinct, non-generic code-editor feel.
+   Used only for step numbers and meta text — body stays system.
+─────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+
+.su-root {
+  position: relative;
+  max-width: 740px;
+  margin: 0 auto;
+  padding-top: 4px;
+}
+
+/* ── Tab bar ────────────────────────────────────────────────── */
+.su-tabbar {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 24px;
+}
+
+.su-tab {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.18s ease;
+  z-index: 1;
+  letter-spacing: 0.01em;
+}
+
+.su-tab:hover:not(.su-tab--active) {
+  color: var(--white-dim);
+}
+
+.su-tab--active {
+  color: var(--white-soft);
+}
+
+.su-tab-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Animated ink fill behind active tab */
+.su-tab-ink {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: var(--surface3);
+  border: 1px solid rgba(139,92,246,0.18);
+  z-index: -1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* ── Section blocks ─────────────────────────────────────────── */
+.su-section {
+  margin-bottom: 12px;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.su-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  background: rgba(255,255,255,0.025);
+  border-bottom: 1px solid var(--border);
+}
+
+.su-step {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 2px 7px;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.su-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--white-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.su-section-action {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.su-section-body {
+  padding: 14px 16px;
+}
+
+/* ── Format cards ───────────────────────────────────────────── */
+.su-formats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 600px) { .su-formats { grid-template-columns: 1fr 1fr; } }
+
+.su-format-card {
+  padding: 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  text-align: left;
+  transition: border-color 0.17s, background 0.17s, transform 0.14s;
+  position: relative;
+  overflow: hidden;
+}
+
+.su-format-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.su-format-card--sel {
+  border-color: rgba(212,160,23,0.55);
+  background: rgba(212,160,23,0.04);
+  box-shadow: 0 0 14px rgba(212,160,23,0.12), inset 0 0 10px rgba(212,160,23,0.04);
+}
+
+.su-format-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--white-soft);
+  margin: 7px 0 3px;
+}
+
+.su-format-desc {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ── Presets + custom input row ─────────────────────────────── */
+.su-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.su-preset {
+  padding: 6px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--border2);
+  position: relative; top: 0;
+  box-shadow: 0 2px 0 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: top 0.1s, box-shadow 0.1s, background 0.14s, color 0.14s;
+}
+.su-preset:hover { top: -1px; box-shadow: 0 3px 0 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06); }
+.su-preset:active { top: 2px; box-shadow: 0 0 0 0 rgba(0,0,0,0.5), inset 0 2px 4px rgba(0,0,0,0.3); }
+.su-preset--sel {
+  background: rgba(139,92,246,0.12);
+  color: var(--purple-light);
+  border-color: rgba(139,92,246,0.38);
+  box-shadow: 0 2px 0 0 #2a1070, 0 0 8px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.su-custom-input {
+  width: 100px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.su-player-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Names grid ─────────────────────────────────────────────── */
+.su-names-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 6px;
+}
+
+.su-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.su-name-idx {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Group player rows */
+.su-names-grid--group {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.su-group-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.028);
+  border: 1px solid rgba(255,255,255,0.055);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.su-group-player-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.su-tag-pills {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.su-tag-pill {
+  cursor: pointer;
+  opacity: 0.35;
+  border: 1px solid transparent !important;
+  transition: opacity 0.15s, box-shadow 0.15s;
+  font-size: 9px !important;
+  padding: 2px 7px !important;
+}
+.su-tag-pill--sel {
+  opacity: 1;
+  box-shadow: 0 0 7px var(--purple-glow);
+}
+.su-tag-pill:hover:not(.su-tag-pill--sel) { opacity: 0.65; }
+
+/* ── Clear btn ──────────────────────────────────────────────── */
+.su-clear-btn {
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.su-clear-btn:hover { color: #e05b4e; border-color: rgba(192,57,43,0.4); }
+
+/* ── Hint text ──────────────────────────────────────────────── */
+.su-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Tag legend ─────────────────────────────────────────────── */
+.su-tag-legend {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.su-tag-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.su-tag-legend-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Generate row ───────────────────────────────────────────── */
+.su-generate-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0 16px;
+}
+
+.su-generate-row--group {
+  padding-top: 18px;
+}
+
+.su-open-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* The main generate button — refined, not flashy */
+.su-gen-btn {
+  padding: 11px 40px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: var(--gold);
+  color: #0c0a14;
+  border: none;
+  position: relative; top: 0;
+  box-shadow:
+    0 3px 0 0 #7a5500,
+    0 4px 14px rgba(212,160,23,0.22),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: top 0.1s, box-shadow 0.1s, background 0.15s;
+}
+.su-gen-btn:hover {
+  top: -1px;
+  background: var(--gold-light);
+  box-shadow:
+    0 4px 0 0 #7a5500,
+    0 8px 20px rgba(212,160,23,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.28);
+}
+.su-gen-btn:active {
+  top: 3px;
+  box-shadow:
+    0 0 0 0 #7a5500,
+    0 2px 6px rgba(212,160,23,0.2),
+    inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.su-gen-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Lobby cards ────────────────────────────────────────────── */
+.su-lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.su-lobby-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  transition: border-color 0.18s;
+}
+
+.su-lobby-card--active {
+  border-color: rgba(139,92,246,0.28);
+  background: rgba(139,92,246,0.03);
+}
+
+.su-lobby-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.su-lobby-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--white-soft);
+  margin-bottom: 3px;
+}
+
+.su-lobby-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.su-lobby-badges {
+  flex-shrink: 0;
+}
+
+/* Badges */
+.su-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.su-badge--live {
+  background: rgba(34,214,122,0.12);
+  color: var(--green);
+  border: 1px solid rgba(34,214,122,0.28);
+}
+.su-badge--draft {
+  background: rgba(255,255,255,0.06);
+  color: var(--muted);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Lobby card action row */
+.su-lobby-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Lobby action buttons */
+.su-lbtn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+.su-lbtn:hover { opacity: 0.82; }
+
+.su-lbtn--open   { background: rgba(255,255,255,0.06); color: var(--white-soft);    border-color: rgba(255,255,255,0.1); }
+.su-lbtn--stage1 { background: rgba(139,92,246,0.12);  color: var(--purple-light); border-color: rgba(139,92,246,0.35); }
+.su-lbtn--stage2 { background: rgba(212,160,23,0.12);  color: var(--gold-light);   border-color: rgba(212,160,23,0.35); }
+.su-lbtn--edit   { background: rgba(255,255,255,0.04); color: var(--muted);        border-color: rgba(255,255,255,0.08); }
+.su-lbtn--del    { background: none; color: var(--muted); border-color: transparent; margin-left: auto; font-size: 13px; padding: 4px 8px; }
+.su-lbtn--del:hover { color: #e05b4e; }
+
+/* New tournament button */
+.su-lobby-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 9px;
+  border: 1px dashed rgba(139,92,246,0.3);
+  background: rgba(139,92,246,0.025);
+  color: var(--purple-light);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.17s, border-color 0.17s;
+}
+.su-lobby-new:hover {
+  background: rgba(139,92,246,0.06);
+  border-color: rgba(139,92,246,0.5);
+}
+.su-lobby-new-plus {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 300;
+}
+
+/* ── Configure header ───────────────────────────────────────── */
+.su-configure-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 0 2px;
+}
+
+.su-back-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 7px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.su-back-btn:hover { color: var(--white-soft); border-color: rgba(255,255,255,0.18); }
+
+.su-configure-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--white-soft);
+  letter-spacing: -0.2px;
+}
+
+/* ── Reset row ──────────────────────────────────────────────── */
+.su-reset-row {
+  text-align: center;
+  padding: 28px 0 40px;
+}
+
+.su-reset-btn {
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 7px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.su-reset-btn:hover { color: #e05b4e; border-color: rgba(192,57,43,0.3); }

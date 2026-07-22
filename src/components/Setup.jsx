@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import { TAG_META } from '../engine/groupEngine.js'
 import { useSetupStorage } from '../hooks/useSetupStorage.js'
+import '../setup.css'
 
 const PRESETS = [4, 8, 16, 32]
 const TAGS    = ['A', 'B', 'C']
@@ -14,12 +15,12 @@ const makePlayer  = (i)      => ({ id: `p${i+1}`, name: '', tag: 'B' })
 const makePlayers = (n, old) => Array.from({ length: n }, (_, i) => old?.[i] ?? makePlayer(i))
 
 const defaults = {
-  mode:         MODE_BRACKET,
-  format:       'single_elim',
-  count:        DEFAULT_COUNT,
-  custom:       '',
-  names:        makePlayers(DEFAULT_COUNT),
-  groupSetups:  [],
+  mode:          MODE_BRACKET,
+  format:        'single_elim',
+  count:         DEFAULT_COUNT,
+  custom:        '',
+  names:         makePlayers(DEFAULT_COUNT),
+  groupSetups:   [],
   activeGroupId: null,
 }
 
@@ -42,6 +43,43 @@ function ConfirmModal({ msg, onConfirm, onCancel }) {
   )
 }
 
+// ── Segmented Tab Bar ───────────────────────────────────────────
+function TabBar({ active, onChange }) {
+  const tabs = [
+    { id: MODE_BRACKET, label: 'Bracket Draw', icon: '⚡' },
+    { id: MODE_GROUP,   label: 'Group Draw',   icon: '⊞' },
+  ]
+  return (
+    <div className="su-tabbar">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          className={`su-tab${active === t.id ? ' su-tab--active' : ''}`}
+          onClick={() => onChange(t.id)}
+        >
+          <span className="su-tab-icon">{t.icon}</span>
+          <span>{t.label}</span>
+          {active === t.id && <motion.div className="su-tab-ink" layoutId="tab-ink" transition={{ type: 'spring', stiffness: 380, damping: 34 }} />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Section Shell ───────────────────────────────────────────────
+function Section({ step, title, action, children }) {
+  return (
+    <div className="su-section">
+      <div className="su-section-head">
+        <span className="su-step">{step}</span>
+        <span className="su-section-title">{title}</span>
+        {action && <div className="su-section-action">{action}</div>}
+      </div>
+      <div className="su-section-body">{children}</div>
+    </div>
+  )
+}
+
 export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGroup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -52,63 +90,42 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
       const remaining = s.groupSetups.filter(g => !archivedIds.includes(g.id))
       if (remaining.length !== s.groupSetups.length) {
         set('groupSetups', remaining)
-        if (archivedIds.includes(s.activeGroupId)) {
-          set('activeGroupId', null)
-        }
+        if (archivedIds.includes(s.activeGroupId)) set('activeGroupId', null)
       }
     }
   }, [history, s.groupSetups, s.activeGroupId, set])
 
-  const applyCount = (n) => {
-    set('count', n)
-    set('custom', String(n))
-    set('names', makePlayers(n, s.names))
-  }
+  // ── Bracket helpers ──
+  const applyCount = (n) => { set('count', n); set('custom', String(n)); set('names', makePlayers(n, s.names)) }
   const onCustomBracket = (val) => {
     set('custom', val)
     const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) {
-      set('count', n)
-      set('names', makePlayers(n, s.names))
-    }
+    if (!isNaN(n) && n >= 2 && n <= 64) { set('count', n); set('names', makePlayers(n, s.names)) }
   }
-
   const updateName = (i, v) => set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
   const clearNames = () => set('names', s.names.map(p => ({ ...p, name: '' })))
 
+  // ── Group helpers ──
   const activeGroup = s.groupSetups.find(g => g.id === s.activeGroupId)
   const isActiveGenerated = activeGroup ? history.some(h => h.id === activeGroup.id) : false
 
   const handleCreateGroup = () => {
-    if (s.groupSetups.length >= 10) {
-      alert("Maximum of 10 active setup cards reached!")
-      return
-    }
-    const title = prompt("Enter Tournament Title (e.g., U 18 A 18):")
+    if (s.groupSetups.length >= 10) { alert('Maximum of 10 active setup cards reached!'); return }
+    const title = prompt('Enter Tournament Title (e.g., U18 Boys):')
     if (!title) return
-    
     const newId = Date.now().toString()
-    const newSetup = {
-      id: newId,
-      title,
-      count: DEFAULT_COUNT,
-      custom: String(DEFAULT_COUNT),
-      size: 4,
-      players: makePlayers(DEFAULT_COUNT)
-    }
-    
+    const newSetup = { id: newId, title, count: DEFAULT_COUNT, custom: String(DEFAULT_COUNT), size: 4, players: makePlayers(DEFAULT_COUNT) }
     set('groupSetups', [...s.groupSetups, newSetup])
     set('activeGroupId', newId)
   }
 
-  const updateActiveGroup = (updates) => {
+  const updateActiveGroup = (updates) =>
     set('groupSetups', prev => prev.map(g => g.id === s.activeGroupId ? { ...g, ...updates } : g))
-  }
 
   const confirmDeleteGroupSetup = (id) => {
     set('groupSetups', prev => prev.filter(g => g.id !== id))
     if (s.activeGroupId === id) set('activeGroupId', null)
-    onArchiveGroup?.(id) 
+    onArchiveGroup?.(id)
     setConfirmDeleteId(null)
   }
 
@@ -120,11 +137,8 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
     if (!activeGroup) return
     updateActiveGroup({ custom: val })
     const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) {
-      updateActiveGroup({ count: n, players: makePlayers(n, activeGroup.players) })
-    }
+    if (!isNaN(n) && n >= 2 && n <= 64) updateActiveGroup({ count: n, players: makePlayers(n, activeGroup.players) })
   }
-
   const updateGroupName = (i, v) => {
     if (!activeGroup) return
     updateActiveGroup({ players: activeGroup.players.map((x, idx) => idx === i ? { ...x, name: v } : x) })
@@ -142,313 +156,188 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
   const resolvedNames = s.names.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
 
   return (
-    <>
-      <div className="neon-bg">
-        <div className="orb orb-1" /><div className="orb orb-2" /><div className="orb orb-3" />
-      </div>
+    <div className="su-root">
 
-      <div className="setup-root">
-        <motion.div className="setup-hero"
-          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <div className="setup-hero-title">Tournament Draws</div>
-          <div className="setup-hero-sub">Build your tournament bracket - offline, instant, zero setup</div>
-        </motion.div>
+      <TabBar
+        active={s.mode}
+        onChange={(m) => { set('mode', m); set('activeGroupId', null) }}
+      />
 
-        <motion.div className="glass mode-toggle-bar"
-          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <button
-            className={`mode-btn${s.mode === MODE_BRACKET ? ' active' : ''}`}
-            onClick={() => set('mode', MODE_BRACKET)}
-          >🏆 Bracket Draw</button>
-          <button
-            className={`mode-btn${s.mode === MODE_GROUP ? ' active' : ''}`}
-            onClick={() => { set('mode', MODE_GROUP); set('activeGroupId', null); }}
-          >⚡ Group Draw</button>
-        </motion.div>
+      <AnimatePresence mode="wait">
 
+        {/* ─────────────── BRACKET MODE ─────────────── */}
         {s.mode === MODE_BRACKET && (
-          <>
-            <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <div className="step-label">
-                <div className="step-num">1</div>
-                <div className="step-title">Choose Format</div>
-              </div>
-              <div className="formats-grid">
-                {FORMATS.map(f => (
-                  <div key={f.id} className={`format-tile${s.format === f.id ? ' sel' : ''}`}
-                    onClick={() => set('format', f.id)}>
-                    <span className={`tag ${f.color}`}>{f.tag}</span>
-                    <div className="format-tile-name">{f.label}</div>
-                    <div className="format-tile-desc">{f.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+          <motion.div key="bracket"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}>
 
-            <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-              <div className="step-label">
-                <div className="step-num">2</div>
-                <div className="step-title">Number of Players</div>
-              </div>
-              <div className="count-presets">
-                {PRESETS.map(n => (
-                  <button key={n} className={`count-btn${s.count === n ? ' sel' : ''}`}
-                    onClick={() => applyCount(n)}>{n}</button>
+            <Section step="1" title="Format">
+              <div className="su-formats">
+                {FORMATS.map(f => (
+                  <button
+                    key={f.id}
+                    className={`su-format-card${s.format === f.id ? ' su-format-card--sel' : ''}`}
+                    onClick={() => set('format', f.id)}
+                  >
+                    <span className={`tag ${f.color}`}>{f.tag}</span>
+                    <div className="su-format-name">{f.label}</div>
+                    <div className="su-format-desc">{f.desc}</div>
+                  </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            </Section>
+
+            <Section step="2" title="Players">
+              <div className="su-presets">
+                {PRESETS.map(n => (
+                  <button key={n} className={`su-preset${s.count === n ? ' su-preset--sel' : ''}`} onClick={() => applyCount(n)}>{n}</button>
+                ))}
                 <input
-                  type="number" min="2" max="64" placeholder="Custom (2-64)"
+                  type="number" min="2" max="64" placeholder="Custom"
                   value={s.custom}
                   onChange={e => onCustomBracket(e.target.value)}
-                  style={{ maxWidth: 160 }}
+                  className="su-custom-input"
                 />
-                <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                  {s.names.length} players
-                </span>
               </div>
-            </motion.div>
+              <div className="su-player-count">{s.names.length} players</div>
+            </Section>
 
             {s.names.length > 0 && (
-              <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
-                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
-                <div className="step-label">
-                  <div className="step-num">3</div>
-                  <div className="step-title">
-                    Player Names
-                    <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12, marginLeft: 6 }}>(optional)</span>
-                  </div>
-                  <button className="clear-names-btn" onClick={clearNames} title="Clear all names">✖ Clear All</button>
-                </div>
-                <div className="names-grid">
+              <Section step="3" title="Names"
+                action={<button className="su-clear-btn" onClick={clearNames}>Clear all</button>}>
+                <div className="su-names-grid">
                   {s.names.map((p, i) => (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
-                      <input
-                        value={p.name}
-                        onChange={e => updateName(i, e.target.value)}
-                        placeholder={`Player ${i+1}`}
-                      />
+                    <div key={p.id} className="su-name-row">
+                      <span className="su-name-idx">#{i+1}</span>
+                      <input value={p.name} onChange={e => updateName(i, e.target.value)} placeholder={`Player ${i+1}`} />
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </Section>
             )}
 
             {s.names.length >= 2 && (
-              <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.34 }}>
-                <button className="gen-btn" onClick={() => onStart({ format: s.format, players: resolvedNames })}>
-                  Generate Bracket 🚀
+              <div className="su-generate-row">
+                <button className="su-gen-btn" onClick={() => onStart({ format: s.format, players: resolvedNames })}>
+                  Generate Bracket
                 </button>
-                <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                  {fmt?.label} • {s.names.length} players
-                </div>
-              </motion.div>
+                <span className="su-gen-meta">{fmt?.label} · {s.names.length} players</span>
+              </div>
             )}
-          </>
+          </motion.div>
         )}
 
-        {/* --- GROUP MODE --- */}
+        {/* ─────────────── GROUP MODE ─────────────── */}
         {s.mode === MODE_GROUP && (
-          <>
-            {s.activeGroupId === null ? (
-              <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                <div className="step-label">
-                  <div className="step-num">1</div>
-                  <div className="step-title">Tournament Setup Lobby ({s.groupSetups.length}/10)</div>
-                </div>
-                
-                <div className="formats-grid">
-                  {s.groupSetups.map(g => {
-                    const tournamentData = history.find(h => h.id === g.id);
-                    const isGenerated = !!tournamentData;
-                    const hasStage2 = tournamentData && tournamentData.stage2;
-                    
-                    return (
-                    <div key={g.id} className="format-tile"
-                          style={{
-                            position: 'relative', display: 'flex', flexDirection: 'column',
-                            textAlign: 'left', padding: '16px', gap: '12px',
-                           background: isGenerated ? 'linear-gradient(145deg, rgba(0,212,255,0.06) 0%, rgba(0,212,255,0.01) 100%)' : 'var(--glass)',
-                           border: isGenerated ? '1px solid rgba(0,212,255,0.3)' : '1px solid var(--border2)',
-                           boxShadow: isGenerated ? '0 4px 20px rgba(0,212,255,0.05)' : 'none',
-                           transition: 'all 0.2s ease'
-                         }}
-                          onClick={() => {
-                           if (isGenerated && onOpenGroup) {
-                             onOpenGroup(g.id, hasStage2 ? 'stage2' : 'groups');
-                           } else {
-                             set('activeGroupId', g.id);
-                           }
-                         }}>
-                        
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div className="format-tile-name" style={{ fontSize: 18, color: isGenerated ? 'var(--neon-blue)' : 'var(--text)' }}>{g.title}</div>
-                          <div className="format-tile-desc" style={{ marginTop: 4 }}>{g.players.length} players • Size {g.size}</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, zIndex: 10 }}>
-                          {isGenerated && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id); }}
-                              style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-yellow)', cursor: 'pointer', transition: 'background 0.2s' }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                              title="Edit Setup"
-                            >✏️</button>
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(g.id); }}
-                            style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-pink)', cursor: 'pointer', transition: 'background 0.2s' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                            title="Delete & Archive"
-                          >🗑</button>
-                        </div>
-                      </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto', flexWrap: 'nowrap' }}>
-                         {isGenerated ? (
-                           <span className="tag tag-green" style={{ fontSize: 10, padding: '4px 8px' }}>🟢 Active</span>
-                         ) : (
-                           <span className="tag" style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.08)' }}>Draft</span>
-                         )}
-                         
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                           {isGenerated ? (
-                             <>
-                               <button
-                                 onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'groups'); }}
-                                 style={{ background: 'rgba(0,212,255,0.1)', color: 'var(--neon-blue)', border: '1px solid rgba(0,212,255,0.4)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                               >
-                                 ▶ Stage 1
-                               </button>
-                               {hasStage2 && (
-                                 <button
-                                   onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'stage2'); }}
-                                   style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                 >
-                                   ▶ Stage 2
-                                 </button>
-                               )}
-                             </>
-                           ) : (
-                             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                               Setup Draft ➔
-                             </span>
-                           )}
-                         </div>
-                      </div>
-                    </div>
-                  )})}
-                  
-                  {s.groupSetups.length < 10 && (
-                    <div className="format-tile" onClick={handleCreateGroup}
-                       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(0,212,255,0.4)', background: 'rgba(0,212,255,0.03)', minHeight: 90 }}>
-                      <div style={{ fontSize: 28, color: 'var(--neon-blue)', fontWeight: 900, lineHeight: 1 }}>+</div>
-                      <div style={{ fontSize: 12, color: 'var(--neon-blue)', marginTop: 8, fontWeight: 700 }}>New Tournament</div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ) : (
-              activeGroup && (
-                <>
-                  <motion.div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', padding: '0 4px' }}
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <button onClick={() => set('activeGroupId', null)} className="btn btn-ghost btn-sm" style={{ padding: '6px 14px' }}>⬅ Back to Lobby</button>
-                    <h3 style={{ margin: 0, color: 'var(--neon-blue)', fontSize: 18 }}>
-                      {activeGroup.title} {isActiveGenerated && <span style={{fontSize: 12, color: 'var(--neon-yellow)', marginLeft: 8}}>(Editing Active)</span>}
-                    </h3>
-                  </motion.div>
+          <motion.div key="group"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}>
 
-                  <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <div className="step-label">
-                      <div className="step-num">2</div>
-                      <div className="step-title">Number of Players</div>
+            <AnimatePresence mode="wait">
+
+              {/* ── Lobby ── */}
+              {s.activeGroupId === null && (
+                <motion.div key="lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <Section step="1" title={`Tournaments · ${s.groupSetups.length}/10`}>
+                    <div className="su-lobby">
+                      {s.groupSetups.map(g => {
+                        const tournamentData = history.find(h => h.id === g.id)
+                        const isGenerated    = !!tournamentData
+                        const hasStage2      = !!(tournamentData?.stage2)
+                        return (
+                          <div key={g.id} className={`su-lobby-card${isGenerated ? ' su-lobby-card--active' : ''}`}>
+                            <div className="su-lobby-card-top">
+                              <div>
+                                <div className="su-lobby-title">{g.title}</div>
+                                <div className="su-lobby-meta">{g.players.length} players · {g.size}/group</div>
+                              </div>
+                              <div className="su-lobby-badges">
+                                {isGenerated
+                                  ? <span className="su-badge su-badge--live">Live</span>
+                                  : <span className="su-badge su-badge--draft">Draft</span>}
+                              </div>
+                            </div>
+                            <div className="su-lobby-card-actions">
+                              {isGenerated ? (
+                                <>
+                                  <button className="su-lbtn su-lbtn--stage1" onClick={() => onOpenGroup(g.id, 'groups')}>Stage 1</button>
+                                  {hasStage2 && <button className="su-lbtn su-lbtn--stage2" onClick={() => onOpenGroup(g.id, 'stage2')}>Stage 2</button>}
+                                  <button className="su-lbtn su-lbtn--edit" onClick={() => set('activeGroupId', g.id)}>Edit</button>
+                                </>
+                              ) : (
+                                <button className="su-lbtn su-lbtn--open" onClick={() => set('activeGroupId', g.id)}>Configure →</button>
+                              )}
+                              <button className="su-lbtn su-lbtn--del" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(g.id) }}>✕</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+
+                      {s.groupSetups.length < 10 && (
+                        <button className="su-lobby-new" onClick={handleCreateGroup}>
+                          <span className="su-lobby-new-plus">+</span>
+                          <span>New Tournament</span>
+                        </button>
+                      )}
                     </div>
-                    <div className="count-presets">
+                  </Section>
+                </motion.div>
+              )}
+
+              {/* ── Configure group ── */}
+              {s.activeGroupId !== null && activeGroup && (
+                <motion.div key="configure" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="su-configure-header">
+                    <button className="su-back-btn" onClick={() => set('activeGroupId', null)}>← Back</button>
+                    <span className="su-configure-title">{activeGroup.title}</span>
+                    {isActiveGenerated && <span className="su-badge su-badge--live" style={{ marginLeft: 8 }}>Live</span>}
+                  </div>
+
+                  <Section step="2" title="Number of Players">
+                    <div className="su-presets">
                       {PRESETS.map(n => (
-                        <button key={n} className={`count-btn${activeGroup.count === n ? ' sel' : ''}`}
-                          onClick={() => applyGroupCount(n)}>{n}</button>
+                        <button key={n} className={`su-preset${activeGroup.count === n ? ' su-preset--sel' : ''}`} onClick={() => applyGroupCount(n)}>{n}</button>
                       ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <input
-                        type="number" min="2" max="64" placeholder="Custom (2-64)"
+                        type="number" min="2" max="64" placeholder="Custom"
                         value={activeGroup.custom}
                         onChange={e => onGroupCustom(e.target.value)}
-                        style={{ maxWidth: 160 }}
+                        className="su-custom-input"
                       />
-                      <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                        {activeGroup.players.length} players
-                      </span>
                     </div>
-                  </motion.div>
+                    <div className="su-player-count">{activeGroup.players.length} players</div>
+                  </Section>
 
-                  <motion.div className="glass" style={{ padding: 20, marginBottom: 14 }}
-                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-                    <div className="step-label">
-                      <div className="step-num">3</div>
-                      <div className="step-title">Players per Group</div>
-                    </div>
-                    <div className="count-presets">
-                      {[2, 3, 4, 5, 6].map(n => (
-                        <button key={n} className={`count-btn${activeGroup.size === n ? ' sel' : ''}`}
-                          onClick={() => updateActiveGroup({ size: n })}>{n}</button>
+                  <Section step="3" title="Players per Group">
+                    <div className="su-presets">
+                      {[2,3,4,5,6].map(n => (
+                        <button key={n} className={`su-preset${activeGroup.size === n ? ' su-preset--sel' : ''}`} onClick={() => updateActiveGroup({ size: n })}>{n}</button>
                       ))}
                     </div>
-                    <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                      Each group plays a full round-robin among same-tier players.
-                    </div>
-                  </motion.div>
+                    <div className="su-hint">Round-robin within each group</div>
+                  </Section>
 
                   {activeGroup.players.length > 0 && (
-                    <motion.div className="glass" style={{ padding: 20, marginBottom: 18 }}
-                      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-                      <div className="step-label">
-                        <div className="step-num">4</div>
-                        <div className="step-title">Players &amp; Skill Tags</div>
-                        <button className="clear-names-btn" onClick={clearGroupNames} title="Clear all names">✖ Clear All</button>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                    <Section step="4" title="Players & Tags"
+                      action={<button className="su-clear-btn" onClick={clearGroupNames}>Clear all</button>}>
+                      <div className="su-tag-legend">
                         {TAGS.map(t => (
-                          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span key={t} className="su-tag-legend-item">
                             <span className={`tag ${TAG_META[t].badge}`}>{t}</span>
-                            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{TAG_META[t].label}</span>
+                            <span className="su-tag-legend-label">{TAG_META[t].label}</span>
                           </span>
                         ))}
                       </div>
-
-                      <div className="names-grid">
+                      <div className="su-names-grid su-names-grid--group">
                         {activeGroup.players.map((p, i) => (
-                          <div key={p.id} className="gp-row" style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(255,255,255,0.04)', padding: 12, borderRadius: 8 }}>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <span style={{ color: 'var(--muted)', fontSize: 11, minWidth: 22 }}>#{i+1}</span>
-                              <input
-                                value={p.name}
-                                onChange={e => updateGroupName(i, e.target.value)}
-                                placeholder={`Player ${i+1}`}
-                                style={{ flex: 1 }}
-                              />
-                            </div>
-                            <div className="tag-selector" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                          <div key={p.id} className="su-group-player-row">
+                            <span className="su-name-idx">#{i+1}</span>
+                            <input value={p.name} onChange={e => updateGroupName(i, e.target.value)} placeholder={`Player ${i+1}`} />
+                            <div className="su-tag-pills">
                               {TAGS.map(t => (
                                 <button
                                   key={t}
-                                  className={`tag ${TAG_META[t].badge}`}
-                                  style={{
-                                    cursor: 'pointer',
-                                    opacity: p.tag === t ? 1 : 0.4,
-                                    boxShadow: p.tag === t ? `0 0 10px ${TAG_META[t].glow}` : 'none',
-                                    border: p.tag === t ? `1px solid ${TAG_META[t].color}` : '1px solid transparent'
-                                  }}
+                                  className={`tag ${TAG_META[t].badge} su-tag-pill${p.tag === t ? ' su-tag-pill--sel' : ''}`}
                                   onClick={() => updateGroupTag(i, t)}
                                 >{t}</button>
                               ))}
@@ -456,84 +345,52 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                           </div>
                         ))}
                       </div>
-                    </motion.div>
+                    </Section>
                   )}
 
                   {activeGroup.players.length >= 2 && (
-                    <motion.div style={{ textAlign: 'center', paddingBottom: 32 }}
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-                      
+                    <div className="su-generate-row su-generate-row--group">
                       {isActiveGenerated && (() => {
-                        const tournamentData = history.find(h => h.id === activeGroup.id);
-                        const hasStage2 = tournamentData && tournamentData.stage2;
+                        const td = history.find(h => h.id === activeGroup.id)
                         return (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginBottom: 24 }}>
-                            <button className="btn" style={{ background: 'rgba(0,212,255,0.15)', color: 'var(--neon-blue)', border: '1px solid rgba(0,212,255,0.4)', padding: '10px 20px' }}
-                              onClick={() => onOpenGroup(activeGroup.id, 'groups')}>
-                              ▶ Open Stage 1 (Groups)
-                            </button>
-                            {hasStage2 && (
-                              <button className="btn" style={{ background: 'rgba(255,215,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)', padding: '10px 20px' }}
-                                onClick={() => onOpenGroup(activeGroup.id, 'stage2')}>
-                                ▶ Open Stage 2 (Knockout)
-                              </button>
-                            )}
+                          <div className="su-open-btns">
+                            <button className="su-lbtn su-lbtn--stage1" onClick={() => onOpenGroup(activeGroup.id, 'groups')}>▶ Stage 1</button>
+                            {td?.stage2 && <button className="su-lbtn su-lbtn--stage2" onClick={() => onOpenGroup(activeGroup.id, 'stage2')}>▶ Stage 2</button>}
                           </div>
-                        );
+                        )
                       })()}
-
-                      <button className="gen-btn"
-                        onClick={() => {
-                          if (isActiveGenerated) {
-                            const proceed = confirm("⚠️ Regenerating will reset all current match scores for this group. Do you want to continue?");
-                            if (!proceed) return;
-                          }
-                          const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
-                          
-                          onGroupStart({
-                            id: activeGroup.id,
-                            title: activeGroup.title,
-                            players: resolvedGroupPlayers,
-                            groupSize: activeGroup.size
-                          })
-                        }}>
-                        {isActiveGenerated ? "Regenerate Groups 🚀" : "Generate Groups 🚀"}
+                      <button className="su-gen-btn" onClick={() => {
+                        if (isActiveGenerated) {
+                          if (!confirm('Regenerating will reset all match scores. Continue?')) return
+                        }
+                        const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+                        onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
+                      }}>
+                        {isActiveGenerated ? 'Regenerate Groups' : 'Generate Groups'}
                       </button>
-                      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
-                        {activeGroup.players.length} players • {activeGroup.size} per group • tag-matched
-                      </div>
-                    </motion.div>
+                      <span className="su-gen-meta">{activeGroup.players.length} players · {activeGroup.size}/group · tag-matched</span>
+                    </div>
                   )}
-                </>
-              )
-            )}
-          </>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Reset everything — extra bottom padding so it clears the footer */}
-        <motion.div style={{ textAlign: 'center', paddingBottom: 48 }}
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-          <button
-            onClick={clearAll}
-            style={{
-              fontSize: 12, color: 'var(--muted)', background: 'none',
-              border: '1px solid var(--border2)', borderRadius: 8,
-              padding: '6px 14px', cursor: 'pointer'
-            }}
-          >⚠️ Reset all setup data</button>
-        </motion.div>
-
-        <AnimatePresence>
-          {confirmDeleteId && (
-            <ConfirmModal
-              msg="Delete this card and move the tournament results to History?"
-              onConfirm={() => confirmDeleteGroupSetup(confirmDeleteId)}
-              onCancel={() => setConfirmDeleteId(null)}
-            />
-          )}
-        </AnimatePresence>
-
+      <div className="su-reset-row">
+        <button className="su-reset-btn" onClick={clearAll}>Reset all setup data</button>
       </div>
-    </>
+
+      <AnimatePresence>
+        {confirmDeleteId && (
+          <ConfirmModal
+            msg="Delete this card and move the tournament results to History?"
+            onConfirm={() => confirmDeleteGroupSetup(confirmDeleteId)}
+            onCancel={() => setConfirmDeleteId(null)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
