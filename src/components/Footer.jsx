@@ -4,7 +4,7 @@ export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="footer-content">
-        
+
         {/* Main Developer Row */}
         <div className="footer-row main-dev">
           <span className="footer-text">Developed by&nbsp;</span>
@@ -16,10 +16,9 @@ export default function Footer() {
           >
             Ayan Malaviya
           </a>
-          <span className="footer-text">&nbsp;(Karimabad JK)</span>
         </div>
 
-        {/* Tester Row (Smaller Font) */}
+        {/* Tester Row */}
         <div className="footer-row sub-dev">
           <span className="footer-text">Tested by&nbsp;</span>
           <a
@@ -30,7 +29,6 @@ export default function Footer() {
           >
             Sufyan Hasnani
           </a>
-          <span className="footer-text">&nbsp;(Thane JK)</span>
         </div>
 
       </div>
