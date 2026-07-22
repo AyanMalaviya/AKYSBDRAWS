@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo, useRef, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   TAG_META,
@@ -15,30 +15,65 @@ import {
 } from '../engine/groupEngine.js'
 import '../group.css'
 
-const TinyTag = ({ tag }) => (
+// ── Static animation variants (defined outside to avoid re-creation per render)
+const MODAL_VARIANTS = {
+  initial: { opacity: 0, scale: 0.92, y: 20 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit:    { opacity: 0, scale: 0.92, y: 20 },
+}
+const CARD_VARIANTS = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+}
+const FADE_SLIDE = {
+  initial: { opacity: 0, y: -12 },
+  animate: { opacity: 1, y: 0 },
+}
+const WINNER_VARIANTS = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+}
+const ADVANCER_MODAL_VARIANTS = {
+  initial: { opacity: 0, scale: 0.94, y: 24 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit:    { opacity: 0, scale: 0.94, y: 24 },
+}
+const POS_EMOJI = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣']
+const SCROLL_AMOUNT = 360
+
+// ── TinyTag — pure, no internal state, memoised ───────────────────────
+const TinyTag = memo(({ tag }) => (
   <span
     className={`tag ${TAG_META[tag || 'C']?.badge || 'tag-green'}`}
     style={{ fontSize: 8, padding: '1px 5px', letterSpacing: 0.5, flexShrink: 0, lineHeight: 1.4 }}
   >{tag || 'C'}</span>
-)
+))
+TinyTag.displayName = 'TinyTag'
 
 // ── Score Entry Modal ─────────────────────────────────────────────────
-function ScoreModal({ match, onConfirm, onClose }) {
+const ScoreModal = memo(function ScoreModal({ match, onConfirm, onClose }) {
   const [s1, setS1] = useState(match.score1 ?? '')
   const [s2, setS2] = useState(match.score2 ?? '')
   const v1 = s1 === '' ? null : Number(s1)
   const v2 = s2 === '' ? null : Number(s2)
   const ready = v1 !== null && v2 !== null && !isNaN(v1) && !isNaN(v2) && v1 >= 0 && v2 >= 0
-  let preview = null
-  if (ready) {
-    if (v1 > v2)      preview = { label: `${match.p1.name} wins`, color: 'var(--green)' }
-    else if (v2 > v1) preview = { label: `${match.p2.name} wins`, color: 'var(--green)' }
-    else              preview = { label: 'Draw', color: 'var(--gold-light)' }
-  }
-  const handleKey = e => { if (e.key === 'Enter' && ready) onConfirm(v1, v2) }
+
+  const preview = useMemo(() => {
+    if (!ready) return null
+    if (v1 > v2) return { label: `${match.p1.name} wins`, color: 'var(--green)' }
+    if (v2 > v1) return { label: `${match.p2.name} wins`, color: 'var(--green)' }
+    return { label: 'Draw', color: 'var(--gold-light)' }
+  }, [ready, v1, v2, match.p1.name, match.p2.name])
+
+  const handleKey = useCallback((e) => {
+    if (e.key === 'Enter' && ready) onConfirm(v1, v2)
+  }, [ready, v1, v2, onConfirm])
+
+  const handleConfirm = useCallback(() => onConfirm(v1, v2), [onConfirm, v1, v2])
+
   return (
     <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <motion.div className="modal-box" initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 20 }} style={{ width: '100%', maxWidth: 360 }}>
+      <motion.div className="modal-box" variants={MODAL_VARIANTS} initial="initial" animate="animate" exit="exit" style={{ width: '100%', maxWidth: 360 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--white-soft)' }}>📊 Enter Score</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 4 }}>✕</button>
@@ -57,43 +92,53 @@ function ScoreModal({ match, onConfirm, onClose }) {
           </div>
         </div>
         <div style={{ minHeight: 24, textAlign: 'center', marginBottom: 16 }}>
-          {preview && (<motion.div key={preview.label} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} style={{ fontSize: 13, fontWeight: 700, color: preview.color }}>{preview.label}</motion.div>)}
+          {preview && (
+            <motion.div key={preview.label} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} style={{ fontSize: 13, fontWeight: 700, color: preview.color }}>
+              {preview.label}
+            </motion.div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" style={{ flex: 2, opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed' }} disabled={!ready} onClick={() => onConfirm(v1, v2)}>✓ Confirm</button>
+          <button className="btn btn-primary btn-sm" style={{ flex: 2, opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed' }} disabled={!ready} onClick={handleConfirm}>✓ Confirm</button>
         </div>
       </motion.div>
     </div>
   )
-}
+})
 
 // ── Match Row ─────────────────────────────────────────────────────────
-function MatchRow({ match, onResult, onScoreEntry }) {
-  const isDone = !!match.winner
+const MatchRow = memo(function MatchRow({ match, onResult, onScoreEntry }) {
+  const isDone  = !!match.winner
   const hasScore = match.score1 != null && match.score2 != null
+
+  const handleP1Click  = useCallback(() => onResult(match.winner?.id === match.p1.id ? null : match.p1), [match, onResult])
+  const handleP2Click  = useCallback(() => onResult(match.winner?.id === match.p2.id ? null : match.p2), [match, onResult])
+  const handleDrawClick = useCallback(() => onResult(match.winner === 'draw' ? null : 'draw'), [match, onResult])
+  const handleScoreClick = useCallback(() => onScoreEntry(match), [match, onScoreEntry])
+
   return (
     <div className={`gm-row${isDone ? ' gm-done' : ''}`}>
-      <button className={`gm-player${match.winner?.id === match.p1.id ? ' gm-win' : ''}`} onClick={() => onResult(match.winner?.id === match.p1.id ? null : match.p1)}>
+      <button className={`gm-player${match.winner?.id === match.p1.id ? ' gm-win' : ''}`} onClick={handleP1Click}>
         <TinyTag tag={match.p1.tag} />
         <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p1.name}</span>
         {hasScore && match.winner?.id === match.p1.id && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>{match.score1}–{match.score2}</span>}
       </button>
       <span className="gm-vs">{hasScore && match.winner === 'draw' ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gold-light)' }}>{match.score1}–{match.score2}</span> : 'vs'}</span>
-      <button className={`gm-player${match.winner?.id === match.p2.id ? ' gm-win' : ''}`} onClick={() => onResult(match.winner?.id === match.p2.id ? null : match.p2)}>
+      <button className={`gm-player${match.winner?.id === match.p2.id ? ' gm-win' : ''}`} onClick={handleP2Click}>
         <TinyTag tag={match.p2.tag} />
         <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p2.name}</span>
         {hasScore && match.winner?.id === match.p2.id && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>{match.score2}–{match.score1}</span>}
       </button>
-      <button className="gm-draw" title="Enter score" onClick={() => onScoreEntry(match)} style={{ fontSize: 14, minWidth: 34 }}>📊</button>
-      <button className={`gm-draw${match.winner === 'draw' ? ' gm-win' : ''}`} onClick={() => onResult(match.winner === 'draw' ? null : 'draw')} title="Mark as draw">D</button>
+      <button className="gm-draw" title="Enter score" onClick={handleScoreClick} style={{ fontSize: 14, minWidth: 34 }}>📊</button>
+      <button className={`gm-draw${match.winner === 'draw' ? ' gm-win' : ''}`} onClick={handleDrawClick} title="Mark as draw">D</button>
     </div>
   )
-}
+})
 
 // ── Standings Table ───────────────────────────────────────────────────
-function StandingsTable({ standings, advancerIds, tiedIds }) {
-  const hasScoreData = standings.some(s => s.scoredFor > 0 || s.scoredAgainst > 0)
+const StandingsTable = memo(function StandingsTable({ standings, advancerIds, tiedIds }) {
+  const hasScoreData = useMemo(() => standings.some(s => s.scoredFor > 0 || s.scoredAgainst > 0), [standings])
   return (
     <table className="gs-table">
       <thead>
@@ -101,7 +146,7 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
       </thead>
       <tbody>
         {standings.map((s, i) => {
-          const isAdv = advancerIds?.includes(s.id)
+          const isAdv  = advancerIds?.includes(s.id)
           const isTied = tiedIds?.includes(s.id)
           return (
             <tr key={s.id} className={[i < 2 ? 'gs-top' : '', isAdv ? 'gs-winner' : '', isTied ? 'gs-tied' : ''].filter(Boolean).join(' ')}>
@@ -124,10 +169,11 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
       </tbody>
     </table>
   )
-}
+})
 
-function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, slot }) {
-  const remaining = tiedPlayers.filter(p => !eliminatedIds.includes(p.id))
+// ── Tie Breaker Panel ─────────────────────────────────────────────────
+const TieBreakerPanel = memo(function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, slot }) {
+  const remaining = useMemo(() => tiedPlayers.filter(p => !eliminatedIds.includes(p.id)), [tiedPlayers, eliminatedIds])
   const resolved  = remaining.length === 1
   return (
     <motion.div className="tb-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
@@ -152,16 +198,14 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
       )}
     </motion.div>
   )
-}
+})
 
 // ── Select Advancers Modal ────────────────────────────────────────────
-function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
+const SelectAdvancersModal = memo(function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
   const allPlayers = useMemo(() => {
     const rows = []
     groups.forEach(g => {
-      g.standings.forEach((s, rank) => {
-        rows.push({ ...s, groupId: g.id, groupName: g.name, rank })
-      })
+      g.standings.forEach((s, rank) => rows.push({ ...s, groupId: g.id, groupName: g.name, rank }))
     })
     rows.sort((a, b) =>
       (b.points    ?? 0) - (a.points    ?? 0) ||
@@ -174,22 +218,28 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
 
   const [selected, setSelected] = useState(() => new Set(allPlayers.slice(0, defaultCount).map(p => p.id)))
 
-  const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const selectTop = (n) => setSelected(new Set(allPlayers.slice(0, n).map(p => p.id)))
+  const toggle    = useCallback((id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }), [])
+  const selectTop = useCallback((n) => setSelected(new Set(allPlayers.slice(0, n).map(p => p.id))), [allPlayers])
 
-  const count    = selected.size
-  const hasScores = allPlayers.some(p => p.scoredFor > 0 || p.scoredAgainst > 0)
-  const posEmoji = ['🏆','⭐','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣']
+  const count      = selected.size
+  const hasScores  = useMemo(() => allPlayers.some(p => p.scoredFor > 0 || p.scoredAgainst > 0), [allPlayers])
 
-  const quickOptions = []
-  for (let n = 2; n <= Math.min(allPlayers.length - 1, 12); n += (allPlayers.length > 10 ? 2 : 1)) quickOptions.push(n)
+  const quickOptions = useMemo(() => {
+    const opts = []
+    for (let n = 2; n <= Math.min(allPlayers.length - 1, 12); n += (allPlayers.length > 10 ? 2 : 1)) opts.push(n)
+    return opts
+  }, [allPlayers.length])
+
+  const handleConfirm = useCallback(() => onConfirm(allPlayers.filter(p => selected.has(p.id))), [onConfirm, allPlayers, selected])
+
+  // Stable array derived from Set for emoji lookup — recomputed only when selected changes
+  const selectedArr = useMemo(() => Array.from(selected), [selected])
 
   return (
     <div className="modal-overlay" style={{ zIndex: 3000, alignItems: 'flex-start', paddingTop: 32 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.94, y: 24 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.94, y: 24 }}
+        variants={ADVANCER_MODAL_VARIANTS}
+        initial="initial" animate="animate" exit="exit"
         style={{ background: 'rgba(16,14,31,0.98)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 20, padding: '24px 0 0', width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 0 60px rgba(139,92,246,0.18), 0 24px 64px rgba(0,0,0,0.7)' }}
       >
         <div style={{ padding: '0 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
@@ -215,7 +265,7 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
             return (
               <button key={p.id} onClick={() => toggle(p.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, marginBottom: 6, cursor: 'pointer', textAlign: 'left', background: isSelected ? 'rgba(34,214,122,0.10)' : 'rgba(255,255,255,0.03)', border: `1px solid ${isSelected ? 'rgba(34,214,122,0.42)' : 'rgba(255,255,255,0.07)'}`, boxShadow: isSelected ? '0 0 12px rgba(34,214,122,0.09)' : 'none', transition: 'all 0.15s' }}>
                 <div style={{ width: 26, flexShrink: 0, textAlign: 'center', fontSize: 14 }}>
-                  {isSelected ? (posEmoji[Array.from(selected).indexOf(p.id)] || '✅') : <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>#{globalRank + 1}</span>}
+                  {isSelected ? (POS_EMOJI[selectedArr.indexOf(p.id)] || '✅') : <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>#{globalRank + 1}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -236,50 +286,67 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
 
         <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-sm" style={{ flex: 2, background: count === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(34,214,122,0.14)', border: `1px solid ${count === 0 ? 'var(--border2)' : 'rgba(34,214,122,0.45)'}`, color: count === 0 ? 'var(--muted)' : 'var(--green)', fontWeight: 800, fontSize: 14, opacity: count === 0 ? 0.5 : 1, cursor: count === 0 ? 'not-allowed' : 'pointer', padding: '10px 0' }} disabled={count === 0} onClick={() => onConfirm(allPlayers.filter(p => selected.has(p.id)))}>
+          <button className="btn btn-sm" style={{ flex: 2, background: count === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(34,214,122,0.14)', border: `1px solid ${count === 0 ? 'var(--border2)' : 'rgba(34,214,122,0.45)'}`, color: count === 0 ? 'var(--muted)' : 'var(--green)', fontWeight: 800, fontSize: 14, opacity: count === 0 ? 0.5 : 1, cursor: count === 0 ? 'not-allowed' : 'pointer', padding: '10px 0' }} disabled={count === 0} onClick={handleConfirm}>
             Advance {count} Player{count !== 1 ? 's' : ''} →
           </button>
         </div>
       </motion.div>
     </div>
   )
-}
+})
 
-function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, onEditAction, eliminatedIds, onEliminate, advancersPerGroup }) {
+// ── Group Card ────────────────────────────────────────────────────────
+const GroupCard = memo(function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, onEditAction, eliminatedIds, onEliminate, advancersPerGroup }) {
   const [showStandings, setShowStandings] = useState(false)
   const [scoreModal, setScoreModal]       = useState(null)
 
-  const done    = group.matches.filter(m => m.winner).length
+  const done    = useMemo(() => group.matches.filter(m => m.winner).length, [group.matches])
   const total   = group.matches.length
   const pct     = total ? Math.round((done / total) * 100) : 0
   const allDone = done === total && total > 0
 
-  // Clamp per-group: can never advance more than (this group's players - 1)
   const maxForThisGroup = Math.max(1, group.players.length - 1)
   const count = Math.min(advancersPerGroup || 2, maxForThisGroup)
 
-  const { advancers, tied, needsTieBreak } = allDone
-    ? getGroupAdvancerInfo(group, count)
-    : { advancers: [], tied: [], needsTieBreak: false }
+  const advancerInfo = useMemo(() => {
+    if (!allDone) return { advancers: [], tied: [], needsTieBreak: false }
+    return getGroupAdvancerInfo(group, count)
+  }, [allDone, group, count])
 
-  const remainingTied = tied.filter(p => !eliminatedIds.includes(p.id))
+  const { advancers, tied, needsTieBreak } = advancerInfo
+
+  const remainingTied = useMemo(() => tied.filter(p => !eliminatedIds.includes(p.id)), [tied, eliminatedIds])
   const tieResolved   = needsTieBreak ? remainingTied.length <= (count - advancers.length) : true
 
-  const finalAdvancers = needsTieBreak
-    ? [...advancers, ...remainingTied.slice(0, count - advancers.length)]
-    : advancers.slice(0, count)
+  const finalAdvancers = useMemo(() => {
+    if (needsTieBreak) return [...advancers, ...remainingTied.slice(0, count - advancers.length)]
+    return advancers.slice(0, count)
+  }, [needsTieBreak, advancers, remainingTied, count])
 
-  const advancerIds = finalAdvancers.map(p => p.id).filter(Boolean)
-  const tiedIds     = needsTieBreak && !tieResolved ? tied.map(t => t.id) : []
-  const posEmoji    = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣']
+  const advancerIds = useMemo(() => finalAdvancers.map(p => p.id).filter(Boolean), [finalAdvancers])
+  const tiedIds     = useMemo(() => needsTieBreak && !tieResolved ? tied.map(t => t.id) : [], [needsTieBreak, tieResolved, tied])
+
+  // Tie-breaker enriched players — stable reference
+  const tieBreakerPlayers = useMemo(() => tied.map(p => ({
+    ...p,
+    points:    group.standings.find(s => s.id === p.id)?.points    ?? 0,
+    wins:      group.standings.find(s => s.id === p.id)?.wins      ?? 0,
+    scoreDiff: group.standings.find(s => s.id === p.id)?.scoreDiff ?? 0,
+  })), [tied, group.standings])
+
+  const handleScoreModalClose   = useCallback(() => setScoreModal(null), [])
+  const handleScoreModalConfirm = useCallback((v1, v2) => {
+    onUpdateWithScore(group.id, scoreModal.id, v1, v2)
+    setScoreModal(null)
+  }, [group.id, scoreModal, onUpdateWithScore])
+
+  const toggleStandings = useCallback(() => setShowStandings(s => !s), [])
 
   return (
-    <motion.div className={`group-card${allDone && !isEditing ? ' group-card--done' : ''}`} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+    <motion.div className={`group-card${allDone && !isEditing ? ' group-card--done' : ''}`} variants={CARD_VARIANTS} initial="initial" animate="animate">
       <AnimatePresence>
         {scoreModal && (
-          <ScoreModal match={scoreModal} onClose={() => setScoreModal(null)}
-            onConfirm={(v1, v2) => { onUpdateWithScore(group.id, scoreModal.id, v1, v2); setScoreModal(null) }}
-          />
+          <ScoreModal match={scoreModal} onClose={handleScoreModalClose} onConfirm={handleScoreModalConfirm} />
         )}
       </AnimatePresence>
 
@@ -332,12 +399,12 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
       ) : (
         <>
           {allDone && finalAdvancers.length > 0 && (
-            <motion.div className="gc-winner-banner" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <motion.div className="gc-winner-banner" variants={WINNER_VARIANTS} initial="initial" animate="animate">
               <div style={{ width: '100%' }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Advancing</div>
                 {finalAdvancers.map((p, idx) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: idx < finalAdvancers.length - 1 ? 4 : 0 }}>
-                    <span style={{ fontSize: 15 }}>{posEmoji[idx] || '▶'}</span>
+                    <span style={{ fontSize: 15 }}>{POS_EMOJI[idx] || '▶'}</span>
                     <span style={{ fontWeight: idx === 0 ? 800 : 700, fontSize: idx === 0 ? 14 : 13, color: idx === 0 ? 'var(--white-soft)' : 'var(--muted)' }}>{p.name}</span>
                     <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{group.standings.find(s => s.id === p.id)?.points ?? 0}pts</span>
                   </div>
@@ -349,16 +416,18 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
           {allDone && needsTieBreak && (
             <TieBreakerPanel
               groupName={group.name}
-              tiedPlayers={tied.map(p => ({ ...p, points: group.standings.find(s => s.id === p.id)?.points ?? 0, wins: group.standings.find(s => s.id === p.id)?.wins ?? 0, scoreDiff: group.standings.find(s => s.id === p.id)?.scoreDiff ?? 0 }))}
-              eliminatedIds={eliminatedIds} onEliminate={onEliminate} slot={advancers.length + 1}
+              tiedPlayers={tieBreakerPlayers}
+              eliminatedIds={eliminatedIds}
+              onEliminate={onEliminate}
+              slot={advancers.length + 1}
             />
           )}
           <div className="gc-matches">
             {group.matches.map(m => (
-              <MatchRow key={m.id} match={m} onResult={w => onUpdate(group.id, m.id, w)} onScoreEntry={match => setScoreModal(match)} />
+              <MatchRow key={m.id} match={m} onResult={w => onUpdate(group.id, m.id, w)} onScoreEntry={setScoreModal} />
             ))}
           </div>
-          <button className="gc-standings-toggle" onClick={() => setShowStandings(s => !s)}>
+          <button className="gc-standings-toggle" onClick={toggleStandings}>
             {showStandings ? '▼ Hide Standings' : '▶ Standings'}
           </button>
           <AnimatePresence>
@@ -372,8 +441,9 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
       )}
     </motion.div>
   )
-}
+})
 
+// ── Main GroupView ────────────────────────────────────────────────────
 export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2 }) {
   const [isEditing, setIsEditing]                   = useState(false)
   const [draftGroups, setDraftGroups]               = useState(null)
@@ -386,62 +456,60 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const gridRef      = useRef(null)
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
-  // Max the stepper can go = largest group size - 1
-  // (smaller groups automatically clamp their own count inside GroupCard)
   const maxAdvancers = useMemo(() => {
     if (!groups.length) return 4
     const maxSize = Math.max(...groups.map(g => g.players.length))
     return Math.max(1, maxSize - 1)
   }, [groups])
 
-  // safeAdvancers is what the stepper shows; per-group clamping happens inside GroupCard
   const safeAdvancers = Math.min(advancersPerGroup, maxAdvancers)
 
-  const handleStartEdit  = () => { setDraftGroups(JSON.parse(JSON.stringify(groups))); setIsEditing(true) }
-  const handleSaveEdit   = () => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }
-  const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
+  const handleStartEdit  = useCallback(() => { setDraftGroups(JSON.parse(JSON.stringify(groups))); setIsEditing(true) }, [groups])
+  const handleSaveEdit   = useCallback(() => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }, [draftGroups, onGroupsUpdate])
+  const handleCancelEdit = useCallback(() => { setIsEditing(false); setDraftGroups(null) }, [])
 
-  const resetStage2Flow = () => { setConfirmedAdvancers(null); setShowStage2Config(false); setShowAdvancerModal(false) }
+  const resetStage2Flow = useCallback(() => { setConfirmedAdvancers(null); setShowStage2Config(false); setShowAdvancerModal(false) }, [])
 
-  const handleUpdateMatch = (groupId, matchId, winner) => {
+  const handleUpdateMatch = useCallback((groupId, matchId, winner) => {
     const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResult(cleared, groupId, matchId, winner))
     resetStage2Flow()
-  }
+  }, [groups, onGroupsUpdate, resetStage2Flow])
 
-  const handleUpdateMatchWithScore = (groupId, matchId, s1, s2) => {
+  const handleUpdateMatchWithScore = useCallback((groupId, matchId, s1, s2) => {
     const cleared = groups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
     onGroupsUpdate(recordGroupResultWithScore(cleared, groupId, matchId, s1, s2))
     resetStage2Flow()
-  }
+  }, [groups, onGroupsUpdate, resetStage2Flow])
 
-  const handleEditAction = (action, groupId, playerId, payload) => {
-    let next = draftGroups
-    if (action === 'rename_group')  next = renameGroup(next, groupId, payload)
-    if (action === 'add_player')    next = addPlayerToGroup(next, groupId)
-    if (action === 'remove_player') next = removePlayerFromGroup(next, groupId, playerId)
-    if (action === 'update_player') next = updatePlayerProps(next, groupId, playerId, payload)
-    if (action === 'move_player')   next = movePlayerBetweenGroups(next, groupId, playerId, payload)
-    if (action === 'delete_group')  next = deleteGroup(next, groupId)
-    setDraftGroups(next)
-  }
+  const handleEditAction = useCallback((action, groupId, playerId, payload) => {
+    setDraftGroups(prev => {
+      let next = prev
+      if (action === 'rename_group')  next = renameGroup(next, groupId, payload)
+      if (action === 'add_player')    next = addPlayerToGroup(next, groupId)
+      if (action === 'remove_player') next = removePlayerFromGroup(next, groupId, playerId)
+      if (action === 'update_player') next = updatePlayerProps(next, groupId, playerId, payload)
+      if (action === 'move_player')   next = movePlayerBetweenGroups(next, groupId, playerId, payload)
+      if (action === 'delete_group')  next = deleteGroup(next, groupId)
+      return next
+    })
+  }, [])
 
-  const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
+  const handleCreateGroup = useCallback(() => setDraftGroups(prev => createNewGroup(prev)), [])
 
-  const handleEliminate = (groupId, playerId) => {
+  const handleEliminate = useCallback((groupId, playerId) => {
     onGroupsUpdate(groups.map(g =>
       g.id === groupId ? { ...g, eliminatedIds: [...(g.eliminatedIds || []), playerId] } : g
     ))
     resetStage2Flow()
-  }
+  }, [groups, onGroupsUpdate, resetStage2Flow])
 
-  const SCROLL_AMOUNT = 360
-  const scrollLeft  = () => gridRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' })
-  const scrollRight = () => gridRef.current?.scrollBy({ left:  SCROLL_AMOUNT, behavior: 'smooth' })
+  const scrollLeft  = useCallback(() => gridRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' }), [])
+  const scrollRight = useCallback(() => gridRef.current?.scrollBy({ left:  SCROLL_AMOUNT, behavior: 'smooth' }), [])
 
-  const allGroupsDone = !isEditing && groups.every(
+  const allGroupsDone = useMemo(() => !isEditing && groups.every(
     g => g.matches.every(m => m.winner !== null) && g.matches.length > 0
-  )
+  ), [isEditing, groups])
 
   const unresolvedGroups = useMemo(() => {
     if (!allGroupsDone) return []
@@ -460,9 +528,8 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   const defaultSelectCount = useMemo(() => {
     const total = groups.reduce((sum, g) => sum + g.players.length, 0)
-    const effectiveTotal = groups.reduce((sum, g) => {
-      return sum + Math.min(safeAdvancers, Math.max(1, g.players.length - 1))
-    }, 0)
+    const effectiveTotal = groups.reduce((sum, g) =>
+      sum + Math.min(safeAdvancers, Math.max(1, g.players.length - 1)), 0)
     return Math.max(1, Math.min(effectiveTotal, total - 1))
   }, [groups, safeAdvancers])
 
@@ -481,17 +548,71 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     return rows.slice(0, defaultSelectCount)
   }, [confirmedAdvancers, groups, defaultSelectCount])
 
-  const handleAdvancerConfirm = (picked) => {
+  const handleAdvancerConfirm = useCallback((picked) => {
     setConfirmedAdvancers(picked)
     setShowAdvancerModal(false)
     setShowStage2Config(true)
-  }
+  }, [])
 
-  const handleLaunchStage2 = () => {
+  const handleLaunchStage2 = useCallback(() => {
     if (confirmedAdvancers?.length && onAdvanceToStage2) onAdvanceToStage2(finalAdvancerList, stage2Type)
-  }
+  }, [confirmedAdvancers, onAdvanceToStage2, finalAdvancerList, stage2Type])
 
-  const posEmoji = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣']
+  const handleOpenAdvancerModal  = useCallback(() => setShowAdvancerModal(true), [])
+  const handleCloseAdvancerModal = useCallback(() => setShowAdvancerModal(false), [])
+  const handleChangeSelection    = useCallback(() => setShowAdvancerModal(true), [])
+
+  // Stable per-group eliminate handlers — keyed by group id
+  const eliminateHandlers = useMemo(() => {
+    const map = {}
+    activeGroups.forEach(g => {
+      map[g.id] = (playerId) => handleEliminate(g.id, playerId)
+    })
+    return map
+  }, [activeGroups, handleEliminate])
+
+  // Stable per-group update handlers
+  const updateMatchHandlers = useMemo(() => {
+    const map = {}
+    activeGroups.forEach(g => {
+      map[g.id] = (matchId, winner) => handleUpdateMatch(g.id, matchId, winner)
+    })
+    return map
+  }, [activeGroups, handleUpdateMatch])
+
+  const updateMatchWithScoreHandlers = useMemo(() => {
+    const map = {}
+    activeGroups.forEach(g => {
+      map[g.id] = (matchId, s1, s2) => handleUpdateMatchWithScore(g.id, matchId, s1, s2)
+    })
+    return map
+  }, [activeGroups, handleUpdateMatchWithScore])
+
+  // Memoised summary rows for per-group advancers preview (only recalculate when groups/safeAdvancers change)
+  const summaryRows = useMemo(() => {
+    if (!allGroupsDone) return []
+    return groups.map(g => {
+      const maxForG = Math.max(1, g.players.length - 1)
+      const count2  = Math.min(safeAdvancers, maxForG)
+      const { advancers: adv, tied, needsTieBreak } = getGroupAdvancerInfo(g, count2)
+      const elims  = g.eliminatedIds || []
+      const remainingTied = tied.filter(p => !elims.includes(p.id))
+      const slotsLeft = count2 - adv.length
+      const finalAdv  = needsTieBreak
+        ? [...adv, ...remainingTied.slice(0, slotsLeft)]
+        : adv.slice(0, count2)
+      return { g, finalAdv, needsTieBreak, remainingTied, slotsLeft }
+    })
+  }, [allGroupsDone, groups, safeAdvancers])
+
+  const advancerBtnStyle = useMemo(() => ({
+    padding: '8px 14px',
+    background: allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.09)' : 'rgba(255,255,255,0.05)',
+    color:      allGroupsDone && allTiesResolved ? 'var(--green)' : 'var(--muted)',
+    border:    `1px solid ${allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.35)' : 'rgba(255,255,255,0.1)'}`,
+    opacity:    allGroupsDone && allTiesResolved ? 1 : 0.55,
+    cursor:     allGroupsDone && allTiesResolved ? 'pointer' : 'not-allowed',
+  }), [allGroupsDone, allTiesResolved])
 
   return (
     <div className="group-view" style={{ paddingTop: 10 }}>
@@ -499,44 +620,23 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24, background: 'rgba(0,0,0,0.3)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border2)' }}>
         {!isEditing ? (
           <>
-            {/* Left side: navigation + edit */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
               <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
             </div>
-
-            {/* Right side: advancers-per-group stepper + Review button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7 }}>Advancing / Group</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.22)', borderRadius: 10, padding: '6px 8px' }}>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers <= 1 ? 0.45 : 1 }}
-                  disabled={safeAdvancers <= 1}
-                  onClick={() => { setAdvancersPerGroup(v => Math.max(1, v - 1)); resetStage2Flow() }}
-                >−</button>
+                <button className="btn btn-ghost btn-sm" style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers <= 1 ? 0.45 : 1 }} disabled={safeAdvancers <= 1}
+                  onClick={() => { setAdvancersPerGroup(v => Math.max(1, v - 1)); resetStage2Flow() }}>−</button>
                 <div style={{ minWidth: 30, textAlign: 'center', fontWeight: 800, color: 'var(--white-soft)' }}>{safeAdvancers}</div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers >= maxAdvancers ? 0.45 : 1 }}
-                  disabled={safeAdvancers >= maxAdvancers}
-                  onClick={() => { setAdvancersPerGroup(v => Math.min(maxAdvancers, v + 1)); resetStage2Flow() }}
-                >+</button>
+                <button className="btn btn-ghost btn-sm" style={{ minWidth: 34, padding: '6px 10px', opacity: safeAdvancers >= maxAdvancers ? 0.45 : 1 }} disabled={safeAdvancers >= maxAdvancers}
+                  onClick={() => { setAdvancersPerGroup(v => Math.min(maxAdvancers, v + 1)); resetStage2Flow() }}>+</button>
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{defaultSelectCount} total by default</div>
-              <button
-                className="btn btn-sm"
-                style={{
-                  padding: '8px 14px',
-                  background: allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.09)' : 'rgba(255,255,255,0.05)',
-                  color: allGroupsDone && allTiesResolved ? 'var(--green)' : 'var(--muted)',
-                  border: `1px solid ${allGroupsDone && allTiesResolved ? 'rgba(34,214,122,0.35)' : 'rgba(255,255,255,0.1)'}`,
-                  opacity: allGroupsDone && allTiesResolved ? 1 : 0.55,
-                  cursor: allGroupsDone && allTiesResolved ? 'pointer' : 'not-allowed',
-                }}
-                disabled={!allGroupsDone || !allTiesResolved}
-                onClick={() => setShowAdvancerModal(true)}
-              >🏆 Review Advancers</button>
+              <button className="btn btn-sm" style={advancerBtnStyle} disabled={!allGroupsDone || !allTiesResolved} onClick={handleOpenAdvancerModal}>
+                🏆 Review Advancers
+              </button>
             </div>
           </>
         ) : (
@@ -554,7 +654,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       </div>
 
       {isEditing && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 20, padding: 12, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.3)', color: 'var(--purple-light)', borderRadius: 8, fontSize: 13, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <motion.div variants={FADE_SLIDE} initial="initial" animate="animate" style={{ marginBottom: 20, padding: 12, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.3)', color: 'var(--purple-light)', borderRadius: 8, fontSize: 13, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <span style={{ fontSize: 18 }}>💡</span>
           <div><strong>Draft Mode:</strong> Rename groups, move/add/remove players, or delete empty groups. Scores are preserved. New players get matches auto-generated.</div>
         </motion.div>
@@ -563,60 +663,45 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       {/* ── Group Stage Complete summary ─────────────────────────────── */}
       <AnimatePresence>
         {allGroupsDone && !isEditing && (
-          <motion.div className="gv-summary" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div className="gv-summary" variants={FADE_SLIDE} initial="initial" animate="animate">
             <div className="gv-summary-title">🎉 Group Stage Complete</div>
-
             {!allTiesResolved ? (
               <div className="gv-summary-notice">⚠️ Resolve tie-breaks inside the affected groups before confirming advancers.</div>
             ) : (
               <div className="gv-summary-subtitle">Choose how many advance per group in the top bar, then review and confirm the final Stage 2 list.</div>
             )}
-
-            {/* Per-group advancers preview */}
             <div className="gv-summary-list">
-              {groups.map(g => {
-                const maxForG = Math.max(1, g.players.length - 1)
-                const count2 = Math.min(safeAdvancers, maxForG)
-                const { advancers: adv, tied, needsTieBreak } = getGroupAdvancerInfo(g, count2)
-                const elims = g.eliminatedIds || []
-                const remainingTied = tied.filter(p => !elims.includes(p.id))
-                const slotsLeft = count2 - adv.length
-                const finalAdv = needsTieBreak
-                  ? [...adv, ...remainingTied.slice(0, slotsLeft)]
-                  : adv.slice(0, count2)
-                return (
-                  <div key={g.id} className="gv-summary-group-block">
-                    <div className="gv-summary-group-name">{g.name}</div>
-                    {finalAdv.map((p, idx) => (
-                      <div key={p.id} className="gv-summary-item" style={{ opacity: idx === 0 ? 1 : 0.8 }}>
-                        <span className="gv-summary-pos">{posEmoji[idx] || '▶'}</span>
-                        <span className="gv-summary-name">{p.name}</span>
-                        <span className="gv-summary-pts">{g.standings.find(s => s.id === p.id)?.points ?? 0} pts</span>
-                      </div>
-                    ))}
-                    {needsTieBreak && remainingTied.length > slotsLeft && (
-                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--gold-light)', fontWeight: 700 }}>Boundary tie still unresolved</div>
-                    )}
-                  </div>
-                )
-              })}
+              {summaryRows.map(({ g, finalAdv, needsTieBreak: ntb, remainingTied: rt, slotsLeft: sl }) => (
+                <div key={g.id} className="gv-summary-group-block">
+                  <div className="gv-summary-group-name">{g.name}</div>
+                  {finalAdv.map((p, idx) => (
+                    <div key={p.id} className="gv-summary-item" style={{ opacity: idx === 0 ? 1 : 0.8 }}>
+                      <span className="gv-summary-pos">{POS_EMOJI[idx] || '▶'}</span>
+                      <span className="gv-summary-name">{p.name}</span>
+                      <span className="gv-summary-pts">{g.standings.find(s => s.id === p.id)?.points ?? 0} pts</span>
+                    </div>
+                  ))}
+                  {ntb && rt.length > sl && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--gold-light)', fontWeight: 700 }}>Boundary tie still unresolved</div>
+                  )}
+                </div>
+              ))}
             </div>
 
-            {/* Confirmed advancers chip list */}
             {confirmedAdvancers ? (
               <div style={{ background: 'rgba(34,214,122,0.07)', border: '1px solid rgba(34,214,122,0.28)', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>✅ Final Advancers Confirmed ({confirmedAdvancers.length})</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {confirmedAdvancers.map((p, i) => (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(34,214,122,0.25)', borderRadius: 8, padding: '4px 10px', fontSize: 12 }}>
-                      <span>{posEmoji[i] || '▶'}</span>
+                      <span>{POS_EMOJI[i] || '▶'}</span>
                       <TinyTag tag={p.tag} />
                       <span style={{ color: 'var(--white-soft)', fontWeight: 600 }}>{p.name}</span>
                       <span style={{ color: 'var(--muted)' }}>{p.points ?? 0}pts</span>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setShowAdvancerModal(true)} style={{ marginTop: 10, background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--muted)', fontSize: 12, padding: '5px 12px', borderRadius: 7, cursor: 'pointer' }}>✏️ Change selection</button>
+                <button onClick={handleChangeSelection} style={{ marginTop: 10, background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--muted)', fontSize: 12, padding: '5px 12px', borderRadius: 7, cursor: 'pointer' }}>✏️ Change selection</button>
               </div>
             ) : allTiesResolved ? (
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -624,7 +709,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
               </div>
             ) : null}
 
-            {/* Stage 2 format config — appears after advancers confirmed */}
             {(showStage2Config || hasStage2) && confirmedAdvancers && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -657,14 +741,13 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
         )}
       </AnimatePresence>
 
-      {/* Select Advancers Modal */}
       <AnimatePresence>
         {showAdvancerModal && (
           <SelectAdvancersModal
             groups={groups}
             defaultCount={defaultSelectCount}
             onConfirm={handleAdvancerConfirm}
-            onClose={() => setShowAdvancerModal(false)}
+            onClose={handleCloseAdvancerModal}
           />
         )}
       </AnimatePresence>
@@ -683,12 +766,12 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             key={g.id}
             group={g}
             allGroups={activeGroups}
-            onUpdate={handleUpdateMatch}
-            onUpdateWithScore={handleUpdateMatchWithScore}
+            onUpdate={updateMatchHandlers[g.id]}
+            onUpdateWithScore={updateMatchWithScoreHandlers[g.id]}
             isEditing={isEditing}
             onEditAction={handleEditAction}
             eliminatedIds={g.eliminatedIds || []}
-            onEliminate={(playerId) => handleEliminate(g.id, playerId)}
+            onEliminate={eliminateHandlers[g.id]}
             advancersPerGroup={safeAdvancers}
           />
         ))}
