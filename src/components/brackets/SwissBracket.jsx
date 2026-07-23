@@ -1,10 +1,14 @@
-import React from 'react'
+import React, { useRef, useCallback } from 'react'
 import { produce } from 'immer'
 import MatchCard from '../MatchCard.jsx'
 
 export default function SwissBracket({ bracket, onUpdate }) {
-  const handleWin = (rIdx, mIdx, winner) => {
-    onUpdate(produce(bracket, draft => {
+  // FIX: Track latest state to prevent stale closures
+  const bracketRef = useRef(bracket)
+  bracketRef.current = bracket
+
+  const handleWin = useCallback((rIdx, mIdx, winner) => {
+    onUpdate(produce(bracketRef.current, draft => {
       const match = draft.rounds[rIdx][mIdx]
       if (winner === null) {
         const prev = match.winner
@@ -48,7 +52,7 @@ export default function SwissBracket({ bracket, onUpdate }) {
         draft.champion=draft.standings[0] 
       }
     }))
-  }
+  }, [onUpdate])
 
   const sorted = [...bracket.standings].sort((a,b) => b.points-a.points)
 

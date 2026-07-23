@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useCallback } from 'react'
 import { produce } from 'immer'
 import MatchCard from '../MatchCard.jsx'
 import { advanceWinnerRoundRobin, setDrawRoundRobin } from '../../engine/bracketEngine.js'
@@ -29,9 +29,13 @@ const Standings = ({ standings, champion }) => (
 )
 
 export default function RoundRobinBracket({ bracket, onUpdate }) {
-  const handleWin = (rIdx, mIdx, winner, loser) => {
+  // FIX: Track latest state to prevent stale closures
+  const bracketRef = useRef(bracket)
+  bracketRef.current = bracket
+
+  const handleWin = useCallback((rIdx, mIdx, winner, loser) => {
     if (winner === null) {
-      onUpdate(produce(bracket, draft => {
+      onUpdate(produce(bracketRef.current, draft => {
         const m = draft.rounds[rIdx][mIdx]
         if (m.winner && m.winner !== 'draw') {
           draft.standings = draft.standings.map(s => {
@@ -49,9 +53,13 @@ export default function RoundRobinBracket({ bracket, onUpdate }) {
         m.winner = null; draft.champion = null;
       }))
     } else {
-      onUpdate(advanceWinnerRoundRobin(bracket, rIdx, mIdx, winner, loser))
+      onUpdate(advanceWinnerRoundRobin(bracketRef.current, rIdx, mIdx, winner, loser))
     }
-  }
+  }, [onUpdate])
+
+  const handleDraw = useCallback((rIdx, mIdx) => {
+    onUpdate(setDrawRoundRobin(bracketRef.current, rIdx, mIdx))
+  }, [onUpdate])
 
   return (
     <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -64,7 +72,7 @@ export default function RoundRobinBracket({ bracket, onUpdate }) {
                 {round.map((m, mIdx) => (
                   <MatchCard key={m.id} match={m} showDraw
                     onWin={(w,l) => handleWin(rIdx, mIdx, w, l)}
-                    onDraw={() => onUpdate(setDrawRoundRobin(bracket, rIdx, mIdx))}
+                    onDraw={() => handleDraw(rIdx, mIdx)}
                   />
                 ))}
               </div>

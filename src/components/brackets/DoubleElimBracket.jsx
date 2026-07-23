@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { produce } from 'immer'
 import MatchCard from '../MatchCard.jsx'
 import { advanceWinnerDE, advanceLoserDE, advanceGrandFinalDE } from '../../engine/bracketEngine.js'
@@ -35,7 +35,7 @@ function BracketSection({ label, labelClass, rounds, onWin }) {
       })
     })
     setLines(newLines)
-  }, [rounds]) // <-- FIX: Dependency array added here too
+  }, [rounds])
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -62,36 +62,40 @@ function BracketSection({ label, labelClass, rounds, onWin }) {
 }
 
 export default function DoubleElimBracket({ bracket, onUpdate }) {
-  const handleWinW = (rIdx, mIdx, winner) => {
+  // FIX: Track latest state to prevent stale closures
+  const bracketRef = useRef(bracket)
+  bracketRef.current = bracket
+
+  const handleWinW = useCallback((rIdx, mIdx, winner) => {
     if (winner === null) {
-      onUpdate(produce(bracket, draft => {
+      onUpdate(produce(bracketRef.current, draft => {
         draft.wRounds[rIdx][mIdx].winner = null
       }))
     } else {
-      onUpdate(advanceWinnerDE(bracket, rIdx, mIdx, winner))
+      onUpdate(advanceWinnerDE(bracketRef.current, rIdx, mIdx, winner))
     }
-  }
+  }, [onUpdate])
 
-  const handleWinL = (rIdx, mIdx, winner) => {
+  const handleWinL = useCallback((rIdx, mIdx, winner) => {
     if (winner === null) {
-      onUpdate(produce(bracket, draft => {
+      onUpdate(produce(bracketRef.current, draft => {
         draft.lRounds[rIdx][mIdx].winner = null
       }))
     } else {
-      onUpdate(advanceLoserDE(bracket, rIdx, mIdx, winner))
+      onUpdate(advanceLoserDE(bracketRef.current, rIdx, mIdx, winner))
     }
-  }
+  }, [onUpdate])
 
-  const handleGF = (winner) => {
+  const handleGF = useCallback((winner) => {
     if (winner === null) {
-      onUpdate(produce(bracket, draft => {
+      onUpdate(produce(bracketRef.current, draft => {
         draft.grandFinal.winner = null
         draft.champion = null
       }))
     } else {
-      onUpdate(advanceGrandFinalDE(bracket, winner))
+      onUpdate(advanceGrandFinalDE(bracketRef.current, winner))
     }
-  }
+  }, [onUpdate])
 
   return (
     <div className="bracket-scroll">

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import MatchCard from '../MatchCard.jsx'
 import { advanceWinnerSingleElim, advanceWinnerStage2Elim } from '../../engine/bracketEngine.js'
 
@@ -11,14 +11,19 @@ const V_GAP   = 14
 export default function SingleElimBracket({ bracket, onUpdate }) {
   const containerRef = useRef(null)
   const [lines, setLines] = useState([])
+  
+  // FIX: Track latest bracket state to prevent stale closures in memoized MatchCards
+  const bracketRef = useRef(bracket)
+  bracketRef.current = bracket
 
-  const handleWin = (rIdx, mIdx, winner) => {
-    if (bracket.type === 'stage2_elim') {
-      onUpdate(advanceWinnerStage2Elim(bracket, rIdx, mIdx, winner))
+  const handleWin = useCallback((rIdx, mIdx, winner) => {
+    // Always use bracketRef.current to get the latest state
+    if (bracketRef.current.type === 'stage2_elim') {
+      onUpdate(advanceWinnerStage2Elim(bracketRef.current, rIdx, mIdx, winner))
     } else {
-      onUpdate(advanceWinnerSingleElim(bracket, rIdx, mIdx, winner))
+      onUpdate(advanceWinnerSingleElim(bracketRef.current, rIdx, mIdx, winner))
     }
-  }
+  }, [onUpdate])
 
   // Draw bezier connectors after paint
   useEffect(() => {
@@ -67,7 +72,7 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
       })
     })
     setLines(newLines)
-  }, [bracket]) // <-- FIX: Dependency array added to stop the infinite loop
+  }, [bracket])
 
   const total = bracket.rounds.length
 
