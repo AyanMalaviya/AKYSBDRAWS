@@ -18,6 +18,25 @@ const makeMatch = (p1, p2, round, bracket = 'winners') => ({
 
 const nextPow2 = n => Math.pow(2, Math.ceil(Math.log2(n)))
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto-advance any match where exactly one slot is filled (bye).
+// Works on an already-built bracket.rounds array (mutates a draft inside immer).
+// ─────────────────────────────────────────────────────────────────────────────
+function autoAdvanceByesInRound(draftRounds, roundIdx) {
+  const round = draftRounds[roundIdx]
+  round.forEach((match, matchIdx) => {
+    const hasBye = (match.p1 && !match.p2) || (!match.p1 && match.p2)
+    if (!hasBye || match.winner) return
+    const winner = match.p1 || match.p2
+    match.winner = winner
+    match.isBye  = true
+    const nextRound = draftRounds[roundIdx + 1]
+    if (nextRound) {
+      nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
+    }
+  })
+}
+
 /* --- SINGLE ELIMINATION --- */
 export function generateSingleElim(players) {
   const size = nextPow2(players.length)
@@ -36,39 +55,19 @@ export function generateSingleElim(players) {
     rounds.push(next); prev = next; rn++
   }
 
-  // Auto-advance byes in round 1 (player vs null => player auto-wins)
-  const bracket = { type: 'single_elim', rounds, champion: null }
-  return autoAdvanceByes(bracket)
-}
-
-// Auto-advance any match in round 1 where one slot is null (bye)
-function autoAdvanceByes(bracket) {
-  return produce(bracket, draft => {
-    const round0 = draft.rounds[0]
-    round0.forEach((match, matchIdx) => {
-      if (match.p1 && !match.p2) {
-        // p1 gets bye
-        match.winner = match.p1
-        match.isBye = true
-        const nextRound = draft.rounds[1]
-        if (nextRound) nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = match.p1
-        else draft.champion = match.p1
-      } else if (!match.p1 && match.p2) {
-        // p2 gets bye
-        match.winner = match.p2
-        match.isBye = true
-        const nextRound = draft.rounds[1]
-        if (nextRound) nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = match.p2
-        else draft.champion = match.p2
-      }
-    })
+  return produce({ type: 'single_elim', rounds, champion: null }, draft => {
+    autoAdvanceByesInRound(draft.rounds, 0)
+    // champion edge-case: single player
+    if (draft.rounds[0].length === 1 && draft.rounds[0][0].isBye) {
+      draft.champion = draft.rounds[0][0].winner
+    }
   })
 }
 
 export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
     if (winner === null) {
-      // Don't undo auto-bye matches
+      // Never undo auto-bye matches
       if (draft.rounds[roundIdx][matchIdx].isBye) return
       draft.rounds[roundIdx][matchIdx].winner = null
       let cur = matchIdx
@@ -77,7 +76,6 @@ export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
         const slot = cur % 2 === 0 ? 'p1' : 'p2'
         const m = draft.rounds[r][next]
         if (!m) break
-        // Don't overwrite a slot that was already filled by a bye-advance from the other side
         m[slot] = null; m.winner = null; cur = next
       }
       draft.champion = null
@@ -102,8 +100,16 @@ export function generateStage2Elim(players) {
     cur.push(makeMatch(players[i], players[i + 1] || null, 1, 'stage2'))
   }
   rounds.push(cur)
-  return { type: 'stage2_elim', rounds, champion: null, pendingByeSelection: null }
+
+  return produce({ type: 'stage2_elim', rounds, champion: null, pendingByeSelection: null }, draft => {
+    autoAdvanceByesInRound(draft.rounds, 0)
+    // If all matches are byes (1 player), set champion immediately
+    if (draft.rounds[0].length === 1 && draft.rounds[0][0].isBye) {
+      draft.champion = draft.rounds[0][0].winner
+    }
+  })
 }
+
 export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, byePlayerId = null) {
   return produce(bracket, draft => {
     // 1. Handle Odd-Player Bye Selection
@@ -116,7 +122,6 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
       const nextRoundMatches = [];
       const rn = roundIdx + 2;
 
-      // Reverse Order Matchmaking (1st vs Last)
       let left = 0;
       let right = advancing.length - 1;
       while (left < right) {
@@ -125,10 +130,10 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
         right--;
       }
 
-      // Auto-advance the player with a bye
+      // Auto-advance the bye player
       const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2');
       byeMatch.winner = byePlayer;
-      byeMatch.isBye = true;
+      byeMatch.isBye  = true;
       nextRoundMatches.push(byeMatch);
 
       draft.rounds.push(nextRoundMatches);
@@ -147,7 +152,7 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
     draft.rounds[roundIdx][matchIdx].winner = winner;
     const allDone = draft.rounds[roundIdx].every(m => m.winner !== null);
 
-    // 3. Trigger next round dynamically when current round is completed
+    // 3. Dynamically build next round when current round is complete
     if (allDone && !draft.rounds[roundIdx + 1] && !draft.champion) {
       const winners = draft.rounds[roundIdx].map(m => m.winner);
 
@@ -156,20 +161,16 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
       } else if (winners.length % 2 !== 0) {
         draft.pendingByeSelection = winners;
       } else {
-        let advancing = [...winners];
         const nextRoundMatches = [];
         const rn = roundIdx + 2;
-
-        // Reverse Order Matchmaking (1st vs Last)
-        let left = 0;
-        let right = advancing.length - 1;
+        let left = 0, right = winners.length - 1;
         while (left < right) {
-          nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'));
-          left++;
-          right--;
+          nextRoundMatches.push(makeMatch(winners[left], winners[right], rn, 'stage2'));
+          left++; right--;
         }
-
         draft.rounds.push(nextRoundMatches);
+        // Auto-advance any byes in the newly created round
+        autoAdvanceByesInRound(draft.rounds, roundIdx + 1);
       }
     }
   });
@@ -201,8 +202,21 @@ export function generateDoubleElim(players) {
     if (i % 2 === 1) lCount = Math.max(1, Math.floor(lCount / 2))
   }
   const grandFinal = makeMatch(null, null, 99, 'grand_final')
-  return { type: 'double_elim', wRounds, lRounds, grandFinal, champion: null }
+
+  // Auto-advance byes in winners round 1
+  return produce({ type: 'double_elim', wRounds, lRounds, grandFinal, champion: null }, draft => {
+    autoAdvanceByesInRound(draft.wRounds, 0)
+    // Propagate winners of bye matches to next rounds properly
+    draft.wRounds[0].forEach((match, matchIdx) => {
+      if (!match.isBye) return
+      const nextW = draft.wRounds[1]
+      if (nextW) nextW[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = match.winner
+      else draft.grandFinal.p1 = match.winner
+      // Bye player doesn't drop to losers bracket — no loser
+    })
+  })
 }
+
 export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
     const match = draft.wRounds[roundIdx][matchIdx]
@@ -277,6 +291,7 @@ export function generateRoundRobin(players) {
   const standings = players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
   return { type: 'round_robin', rounds, standings, champion: null }
 }
+
 export function advanceWinnerRoundRobin(bracket, roundIdx, matchIdx, winner, loser) {
   return produce(bracket, draft => {
     draft.rounds[roundIdx][matchIdx].winner = winner

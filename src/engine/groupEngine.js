@@ -26,10 +26,11 @@ function makeRoundRobin(players, groupId) {
   }
   return matches
 }
+
 export function recomputeGroup(g) {
   const idealMatches = makeRoundRobin(g.players, g.id)
   const oldMatches   = g.matches || []
-  
+
   const newMatches = idealMatches.map(ideal => {
     const existing = oldMatches.find(m =>
       (m.p1.id === ideal.p1.id && m.p2.id === ideal.p2.id) ||
@@ -44,9 +45,7 @@ export function recomputeGroup(g) {
       const winner = existing.winner === 'draw' ? 'draw'
         : (existing.winner ? g.players.find(p => p.id === existing.winner.id) || null : null)
 
-      // FIX: Check if data is identical. If so, return the exact same memory reference.
-      // This activates React.memo in the UI and stops unnecessary re-renders.
-      const winnerMatched = (existing.winner === 'draw' && winner === 'draw') || 
+      const winnerMatched = (existing.winner === 'draw' && winner === 'draw') ||
                             (existing.winner?.id === winner?.id);
 
       if (
@@ -56,7 +55,7 @@ export function recomputeGroup(g) {
         existing.score2 === score2 &&
         winnerMatched
       ) {
-        return existing; 
+        return existing;
       }
 
       return { ...existing, p1, p2, score1, score2, winner }
@@ -111,8 +110,6 @@ export function getGroupWinner(group) {
 
 /**
  * Two players are truly tied only when ALL tiebreaker keys are equal.
- * Order: points → scoreDiff → scoredFor → name (name always differs, so
- * a true tie at the boundary only means the first three are identical).
  */
 const trulyTied = (a, b) =>
   a.points    === b.points    &&
@@ -121,28 +118,35 @@ const trulyTied = (a, b) =>
 
 /**
  * Returns advancer info for `count` advancers per group.
- * Auto-resolves ties via scoreDiff → scoredFor first;
- * manual TieBreakerPanel only shows for genuinely equal players.
+ *
+ * FIX: clearAdvancers are ALL players strictly ranked above the boundary
+ * position (i.e. not tied with the player AT position `safeCount - 1`).
+ * slotsLeft = count - clearAdvancers.length, which may be > 1 when multiple
+ * positions are occupied by tied players. Eliminating tied players one by one
+ * correctly resolves multiple open slots.
  */
 export function getGroupAdvancerInfo(group, count = 2) {
   const allDone = group.matches.length > 0 && group.matches.every(m => m.winner !== null)
   if (!allDone) return { advancers: [], tied: [], needsTieBreak: false }
 
-  const sorted = group.standings   // already sorted by full key in recomputeGroup
+  const sorted = group.standings  // already sorted by full key in recomputeGroup
   if (sorted.length <= 1) return { advancers: sorted, tied: [], needsTieBreak: false }
 
   const safeCount = Math.min(count, sorted.length)
-  const boundary  = sorted[safeCount - 1]
-  const nextOne   = sorted[safeCount]   // first player NOT advancing
+  const boundary  = sorted[safeCount - 1]      // last advancer slot
+  const nextOne   = sorted[safeCount]           // first player NOT advancing
 
-  // No true tie at boundary → advance cleanly
+  // No true tie at the boundary — advance cleanly
   if (!nextOne || !trulyTied(boundary, nextOne)) {
     return { advancers: sorted.slice(0, safeCount), tied: [], needsTieBreak: false }
   }
 
-  // True tie: players clearly above boundary + all tied players for manual resolution
-  const clearAdvancers = sorted.slice(0, safeCount - 1).filter(p => !trulyTied(p, boundary))
+  // True tie at boundary:
+  // clearAdvancers = everyone strictly ABOVE the boundary (not tied with it)
+  // tiedPlayers    = everyone tied with the boundary value (spans both sides of the cut)
   const tiedPlayers    = sorted.filter(p => trulyTied(p, boundary))
+  const clearAdvancers = sorted.filter(p => !trulyTied(p, boundary) && sorted.indexOf(p) < safeCount)
+
   return { advancers: clearAdvancers, tied: tiedPlayers, needsTieBreak: true }
 }
 
@@ -154,13 +158,7 @@ export function getGroupAdvancers(group, count = 2) {
 
 /**
  * Reassigns A / B / C tags to a flat list of advancers based on their
- * relative standing (points → scoreDiff → scoredFor → name).
- *
- * Top third  → A (strong)
- * Mid third  → B (average)
- * Bottom third → C (weak)
- *
- * This ensures the stage-2 group draw separates strong players.
+ * relative standing.
  */
 export function reassignTagsByStandings(players) {
   if (!players || players.length === 0) return players
@@ -173,8 +171,8 @@ export function reassignTagsByStandings(players) {
   )
 
   const n    = sorted.length
-  const aEnd = Math.ceil(n / 3)           // top third
-  const bEnd = Math.ceil((n * 2) / 3)     // mid third
+  const aEnd = Math.ceil(n / 3)
+  const bEnd = Math.ceil((n * 2) / 3)
 
   const tagMap = {}
   sorted.forEach((p, i) => {
@@ -184,7 +182,6 @@ export function reassignTagsByStandings(players) {
   return players.map(p => ({ ...p, tag: tagMap[p.id] ?? p.tag }))
 }
 
-// Derives winner from scores, stores them, then recomputes standings
 export function recordGroupResultWithScore(groups, groupId, matchId, score1, score2) {
   return groups.map(g => {
     if (g.id !== groupId) return g
@@ -208,9 +205,6 @@ export function recordGroupResult(groups, groupId, matchId, winner) {
   })
 }
 
-// === GROUP MAKING LOGIC ===
-// generateGroups already places one A per group via byTag buckets,
-// guaranteeing A never faces A in their group.
 export function generateGroups(players, groupSize) {
   const byTag = { A: [], B: [], C: [] }
   players.forEach(p => {
@@ -225,7 +219,6 @@ export function generateGroups(players, groupSize) {
   const numGroups = Math.max(1, Math.ceil(players.length / groupSize))
   const groups = Array.from({ length: numGroups }, () => [])
 
-  // Seed one A per group first — this prevents A vs A
   for (let i = 0; i < numGroups; i++) {
     if (shuffledA.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledA.shift())
     if (shuffledB.length > 0 && groups[i].length < groupSize) groups[i].push(shuffledB.shift())
@@ -247,7 +240,6 @@ export function generateGroups(players, groupSize) {
   )
 }
 
-// --- Edit-mode helpers ---
 export function renameGroup(groups, groupId, newName) {
   return groups.map(g => g.id === groupId ? { ...g, name: newName } : g)
 }
