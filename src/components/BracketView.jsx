@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react'
 import { motion } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
+import KnockoutScoreboard from './KnockoutScoreboard.jsx'
 
 const SingleElimBracket = lazy(() => import('./brackets/SingleElimBracket.jsx'))
 const DoubleElimBracket = lazy(() => import('./brackets/DoubleElimBracket.jsx'))
@@ -32,7 +33,15 @@ export default function BracketView({ tournament, onUpdate }) {
         )}
       </div>
 
+      {/* Knockout Scoreboard — shown for all bracket formats */}
+      <KnockoutScoreboard
+        bracket={bracket}
+        format={format}
+        playerCount={tournament.players.length}
+      />
+
       <div className="landscape-hint">🔄 Rotate to landscape for best bracket view</div>
+
       {/* Wrap the lazy components in Suspense with a lightweight fallback */}
       <Suspense fallback={<div style={{ textAlign: 'center', padding: 20 }}>Loading Bracket...</div>}>
         {format === 'single_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
