@@ -26,6 +26,21 @@ import { useHistory } from './hooks/useHistory.js'
 
 const HOME_FRAME = { view: 'home', tournament: null, groups: null, stage2: null }
 
+/**
+ * Auto-pick the bye recipient from a list of players.
+ * Priority: best scoreDiff → most wins → most scoredFor → alphabetical.
+ * (Matches the scoreboard sort order so the #1 player always gets the bye.)
+ */
+function pickByePlayer(players) {
+  if (!players || players.length === 0) return null
+  return [...players].sort((a, b) =>
+    ((b.scoreDiff ?? b.sd ?? 0) - (a.scoreDiff ?? a.sd ?? 0)) ||
+    ((b.wins      ?? 0)         - (a.wins      ?? 0))         ||
+    ((b.scoredFor ?? b.gf ?? 0) - (a.scoredFor ?? a.gf ?? 0)) ||
+    (a.name ?? '').localeCompare(b.name ?? '')
+  )[0]
+}
+
 export default function App() {
   // Current rendered state
   const [view, setView]             = useState('home')
@@ -38,10 +53,8 @@ export default function App() {
 
   // In-memory navigation stack
   const stackRef = useRef([HOME_FRAME])
-  // Flag so popstate handler knows we triggered push ourselves
   const isPushingRef = useRef(false)
 
-  // ── Apply a frame to React state ─────────────────────────────────────────
   const applyFrame = useCallback((frame) => {
     setView(frame.view)
     setTournament(frame.tournament)
@@ -49,7 +62,6 @@ export default function App() {
     setStage2(frame.stage2)
   }, [])
 
-  // ── Push a new navigation frame ──────────────────────────────────────────
   const navigate = useCallback((newView, extra = {}) => {
     const frame = {
       view: newView,
@@ -64,7 +76,6 @@ export default function App() {
     applyFrame(frame)
   }, [applyFrame])
 
-  // ── Initialise: seed browser history with one entry so first back is ours
   useEffect(() => {
     window.history.replaceState({ depth: 1 }, '')
 
@@ -72,13 +83,11 @@ export default function App() {
       if (isPushingRef.current) return
       const stack = stackRef.current
       if (stack.length <= 1) {
-        // Never exit — re-push so the browser thinks there is still something
         isPushingRef.current = true
         window.history.pushState({ depth: 1 }, '')
         isPushingRef.current = false
         return
       }
-      // Pop our own stack
       stack.pop()
       const prev = stack[stack.length - 1]
       applyFrame(prev)
@@ -88,7 +97,6 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [applyFrame])
 
-  // ── PWA install prompt ───────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
@@ -102,15 +110,12 @@ export default function App() {
     if (outcome === 'accepted') setDeferredPrompt(null)
   }
 
-  // ── Reset to home ────────────────────────────────────────────────────────
   const handleHome = useCallback(() => {
     stackRef.current = [HOME_FRAME]
-    // Replace browser history so there are no stale entries
     window.history.replaceState({ depth: 1 }, '')
     applyFrame(HOME_FRAME)
   }, [applyFrame])
 
-  // ── Bracket draw ─────────────────────────────────────────────────────────
   const handleStart = ({ format, players }) => {
     const t = {
       id: Date.now().toString(), format, players,
@@ -118,7 +123,6 @@ export default function App() {
       isArchived: true,
     }
     upsertHistory(t)
-    // home → bracket
     stackRef.current = [HOME_FRAME]
     navigate('bracket', { tournament: t, groups: null, stage2: null })
   }
@@ -129,14 +133,12 @@ export default function App() {
       const u = { ...prev, bracket: updatedBracket }
       if (isFinished) u.isArchived = true
       upsertHistory(u)
-      // Update the current stack frame in place so back-swipe restores correctly
       const stack = stackRef.current
       if (stack.length > 0) stack[stack.length - 1] = { ...stack[stack.length - 1], tournament: u }
       return u
     })
   }, [upsertHistory])
 
-  // ── Group draw ───────────────────────────────────────────────────────────
   const handleGroupStart = ({ id, title, players, groupSize }) => {
     const g = generateGroups(players, groupSize)
     const t = {
@@ -155,7 +157,6 @@ export default function App() {
       if (!prev) return prev
       const u = { ...prev, groups: updatedGroups }
       upsertHistory(u)
-      // Patch every groups frame in the stack
       stackRef.current.forEach((f, i) => {
         if (f.view === 'groups') stackRef.current[i] = { ...f, groups: updatedGroups, tournament: u }
       })
@@ -163,7 +164,6 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // ── Stage 2 ──────────────────────────────────────────────────────────────
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(advancers)
@@ -189,7 +189,17 @@ export default function App() {
       return
     }
 
-    const bracket = generateStage2Elim(advancers)
+    let bracket = generateStage2Elim(advancers)
+
+    // Auto-resolve bye: if odd players, immediately give the bye to the top
+    // scorer (best SD → wins → scoredFor) so no manual selection is needed.
+    if (bracket.pendingByeSelection) {
+      const byePlayer = pickByePlayer(bracket.pendingByeSelection)
+      if (byePlayer) {
+        bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
+      }
+    }
+
     const s2 = { type: 'knockout', players: advancers, bracket }
     setTournament(prev => {
       const u = { ...prev, stage2: s2 }
@@ -203,10 +213,23 @@ export default function App() {
   }, [tournament, groups, upsertHistory, navigate])
 
   const handleStage2BracketUpdate = useCallback((updatedBracket) => {
+    // Auto-resolve pending bye whenever a new round is built with odd winners
+    let resolvedBracket = updatedBracket
+    if (resolvedBracket.pendingByeSelection) {
+      const byePlayer = pickByePlayer(resolvedBracket.pendingByeSelection)
+      if (byePlayer) {
+        resolvedBracket = advanceWinnerStage2Elim(
+          resolvedBracket,
+          resolvedBracket.rounds.length - 1,
+          null, null,
+          byePlayer.id
+        )
+      }
+    }
     setStage2(prev => {
-      const s2 = { ...prev, bracket: updatedBracket }
+      const s2 = { ...prev, bracket: resolvedBracket }
       setTournament(t => {
-        const isFinished = !!updatedBracket.champion
+        const isFinished = !!resolvedBracket.champion
         const u = { ...t, stage2: s2 }
         if (isFinished) u.isArchived = true
         upsertHistory(u)
@@ -249,7 +272,11 @@ export default function App() {
       navigate('stage2', { groups: newGroups, stage2: s3 })
       return
     }
-    const bracket = generateStage2Elim(advancers)
+    let bracket = generateStage2Elim(advancers)
+    if (bracket.pendingByeSelection) {
+      const byePlayer = pickByePlayer(bracket.pendingByeSelection)
+      if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
+    }
     const s3 = { type: 'knockout', players: advancers, bracket }
     setTournament(prev => {
       const u = { ...prev, stage2: s3 }
@@ -259,13 +286,7 @@ export default function App() {
     navigate('stage2', { groups, stage2: s3 })
   }, [groups, upsertHistory, navigate])
 
-  // ── Restore from History / Setup lobby ──────────────────────────────────
-  //
-  // When opening a tournament that already has stages, we push frames for
-  // every stage so back-swipe traverses: stage2 → groups → home.
-  //
   const handleRestore = useCallback((entry, targetView = 'groups') => {
-    // Always start from a clean home base
     stackRef.current = [HOME_FRAME]
     window.history.replaceState({ depth: 1 }, '')
 
@@ -274,7 +295,6 @@ export default function App() {
       const gGroups    = entry.groups || null
       const gStage2    = entry.stage2 || null
 
-      // Push groups frame first
       const groupsFrame = { view: 'groups', tournament: entry, groups: gGroups, stage2: null }
       stackRef.current.push(groupsFrame)
       isPushingRef.current = true
@@ -282,7 +302,6 @@ export default function App() {
       isPushingRef.current = false
 
       if (hasStage2 && targetView === 'stage2') {
-        // Push stage2 frame on top
         const stage2Frame = { view: 'stage2', tournament: entry, groups: gGroups, stage2: gStage2 }
         stackRef.current.push(stage2Frame)
         isPushingRef.current = true
@@ -293,7 +312,6 @@ export default function App() {
         applyFrame(groupsFrame)
       }
     } else {
-      // Plain bracket
       const bracketFrame = { view: 'bracket', tournament: entry, groups: null, stage2: null }
       stackRef.current.push(bracketFrame)
       isPushingRef.current = true
@@ -303,12 +321,9 @@ export default function App() {
     }
   }, [applyFrame])
 
-  // ── Dashboard navigation (uses navigate so back works) ───────────────────
   const handleDashboard = useCallback(() => {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
-
-  // ─────────────────────────────────────────────────────────────────────────
 
   const s2BannerStyle = {
     display: 'flex', alignItems: 'center', gap: 12,
@@ -416,40 +431,16 @@ export default function App() {
             )}
 
             {stage2.type === 'knockout' && stage2.bracket && (
-              <>
-                {stage2.bracket.pendingByeSelection && (
-                  <div className="modal-overlay" style={{ zIndex: 1000 }}>
-                    <div className="modal-box">
-                      <div className="modal-icon">⭐</div>
-                      <div className="modal-msg" style={{ marginBottom: 16 }}>
-                        <strong>Odd number of players!</strong><br /><br />
-                        Select the highest scorer to receive a bye.
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {stage2.bracket.pendingByeSelection.map(p => (
-                          <button key={p.id} className="btn btn-primary" onClick={() => {
-                            handleStage2BracketUpdate(
-                              advanceWinnerStage2Elim(stage2.bracket, stage2.bracket.rounds.length - 1, null, null, p.id)
-                            )
-                          }}>
-                            Give Bye to {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <BracketView
-                  tournament={{
-                    id: (tournament?.id || 'stage2') + '_s2',
-                    format: 'stage2_elim',
-                    players: stage2.players,
-                    bracket: stage2.bracket,
-                  }}
-                  onUpdate={handleStage2BracketUpdate}
-                  onReset={handleHome}
-                />
-              </>
+              <BracketView
+                tournament={{
+                  id: (tournament?.id || 'stage2') + '_s2',
+                  format: 'stage2_elim',
+                  players: stage2.players,
+                  bracket: stage2.bracket,
+                }}
+                onUpdate={handleStage2BracketUpdate}
+                onReset={handleHome}
+              />
             )}
           </div>
         )}
