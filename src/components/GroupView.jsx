@@ -13,6 +13,7 @@ import {
   createNewGroup,
   deleteGroup,
 } from '../engine/groupEngine.js'
+import Scoreboard from './Scoreboard.jsx'
 import '../group.css'
 
 const TinyTag = ({ tag }) => (
@@ -254,7 +255,6 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
   const pct     = total ? Math.round((done / total) * 100) : 0
   const allDone = done === total && total > 0
 
-  // Clamp per-group: can never advance more than (this group's players - 1)
   const maxForThisGroup = Math.max(1, group.players.length - 1)
   const count = Math.min(advancersPerGroup || 2, maxForThisGroup)
 
@@ -384,24 +384,17 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const [showStage2Config, setShowStage2Config]     = useState(false)
 
   const gridRef      = useRef(null)
-  
-  // FIX: Track the latest 'groups' state via a ref. This is required because 
-  // the children (MatchRow) are heavily memoized. If we don't do this, the
-  // update functions suffer from a stale closure and overwrite old tournament data.
   const groupsRef    = useRef(groups)
   groupsRef.current  = groups
 
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
-  // Max the stepper can go = largest group size - 1
-  // (smaller groups automatically clamp their own count inside GroupCard)
   const maxAdvancers = useMemo(() => {
     if (!groups.length) return 4
     const maxSize = Math.max(...groups.map(g => g.players.length))
     return Math.max(1, maxSize - 1)
   }, [groups])
 
-  // safeAdvancers is what the stepper shows; per-group clamping happens inside GroupCard
   const safeAdvancers = Math.min(advancersPerGroup, maxAdvancers)
 
   const handleStartEdit = () => { 
@@ -411,15 +404,12 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const handleSaveEdit   = () => { onGroupsUpdate(draftGroups); setIsEditing(false); setDraftGroups(null) }
   const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
 
-  // FIX: Stabilize reset logic so it can be safely used inside the dependency arrays
   const resetStage2Flow = useCallback(() => { 
     setConfirmedAdvancers(null); 
     setShowStage2Config(false); 
     setShowAdvancerModal(false); 
   }, [])
 
-  // FIX: Use useCallback and reach for groupsRef.current instead of 'groups' directly.
-  // This completely solves the bug where clicking a new winner removed previous winners.
   const handleUpdateMatch = useCallback((groupId, matchId, winner) => {
     const currentGroups = groupsRef.current;
     const cleared = currentGroups.map(g => g.id === groupId ? { ...g, eliminatedIds: [] } : g)
@@ -515,17 +505,20 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   return (
     <div className="group-view" style={{ paddingTop: 10 }}>
+      {/* ── Scoreboard (always visible, collapsible) ─────────────────── */}
+      {!isEditing && groups.length > 0 && (
+        <Scoreboard groups={groups} />
+      )}
+
       {/* ── Top control bar ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24, background: 'rgba(0,0,0,0.3)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border2)' }}>
         {!isEditing ? (
           <>
-            {/* Left side: navigation + edit */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
               <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
             </div>
 
-            {/* Right side: advancers-per-group stepper + Review button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
               <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7 }}>Advancing / Group</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.22)', borderRadius: 10, padding: '6px 8px' }}>
@@ -592,7 +585,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
               <div className="gv-summary-subtitle">Choose how many advance per group in the top bar, then review and confirm the final Stage 2 list.</div>
             )}
 
-            {/* Per-group advancers preview */}
             <div className="gv-summary-list">
               {groups.map(g => {
                 const maxForG = Math.max(1, g.players.length - 1)
@@ -622,7 +614,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
               })}
             </div>
 
-            {/* Confirmed advancers chip list */}
             {confirmedAdvancers ? (
               <div style={{ background: 'rgba(34,214,122,0.07)', border: '1px solid rgba(34,214,122,0.28)', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>✅ Final Advancers Confirmed ({confirmedAdvancers.length})</div>
@@ -644,7 +635,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
               </div>
             ) : null}
 
-            {/* Stage 2 format config — appears after advancers confirmed */}
             {(showStage2Config || hasStage2) && confirmedAdvancers && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>

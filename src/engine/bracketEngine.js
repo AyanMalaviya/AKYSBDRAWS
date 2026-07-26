@@ -23,23 +23,53 @@ export function generateSingleElim(players) {
   const size = nextPow2(players.length)
   const seeded = [...players]
   while (seeded.length < size) seeded.push(null)
-  
+
   const rounds = []
   let cur = []
   for (let i = 0; i < size; i += 2) cur.push(makeMatch(seeded[i], seeded[i + 1], 1))
   rounds.push(cur)
-  
+
   let rn = 2, prev = cur
   while (prev.length > 1) {
     const next = []
     for (let i = 0; i < prev.length; i += 2) next.push(makeMatch(null, null, rn))
     rounds.push(next); prev = next; rn++
   }
-  return { type: 'single_elim', rounds, champion: null }
+
+  // Auto-advance byes in round 1 (player vs null => player auto-wins)
+  const bracket = { type: 'single_elim', rounds, champion: null }
+  return autoAdvanceByes(bracket)
 }
+
+// Auto-advance any match in round 1 where one slot is null (bye)
+function autoAdvanceByes(bracket) {
+  return produce(bracket, draft => {
+    const round0 = draft.rounds[0]
+    round0.forEach((match, matchIdx) => {
+      if (match.p1 && !match.p2) {
+        // p1 gets bye
+        match.winner = match.p1
+        match.isBye = true
+        const nextRound = draft.rounds[1]
+        if (nextRound) nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = match.p1
+        else draft.champion = match.p1
+      } else if (!match.p1 && match.p2) {
+        // p2 gets bye
+        match.winner = match.p2
+        match.isBye = true
+        const nextRound = draft.rounds[1]
+        if (nextRound) nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = match.p2
+        else draft.champion = match.p2
+      }
+    })
+  })
+}
+
 export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
     if (winner === null) {
+      // Don't undo auto-bye matches
+      if (draft.rounds[roundIdx][matchIdx].isBye) return
       draft.rounds[roundIdx][matchIdx].winner = null
       let cur = matchIdx
       for (let r = roundIdx + 1; r < draft.rounds.length; r++) {
@@ -47,12 +77,13 @@ export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner) {
         const slot = cur % 2 === 0 ? 'p1' : 'p2'
         const m = draft.rounds[r][next]
         if (!m) break
+        // Don't overwrite a slot that was already filled by a bye-advance from the other side
         m[slot] = null; m.winner = null; cur = next
       }
       draft.champion = null
       return
     }
-    
+
     draft.rounds[roundIdx][matchIdx].winner = winner
     const nextRound = draft.rounds[roundIdx + 1]
     if (nextRound) {
@@ -81,11 +112,11 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
       let advancing = [...draft.rounds[roundIdx].map(m => m.winner)];
       const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId);
       const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0];
-      
+
       const nextRoundMatches = [];
       const rn = roundIdx + 2;
-      
-      // Stage 3 Reverse Order Matchmaking (1st vs Last)
+
+      // Reverse Order Matchmaking (1st vs Last)
       let left = 0;
       let right = advancing.length - 1;
       while (left < right) {
@@ -93,12 +124,13 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
         left++;
         right--;
       }
-      
-      // Auto-advance the player with a bye by pairing them against null
+
+      // Auto-advance the player with a bye
       const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2');
       byeMatch.winner = byePlayer;
+      byeMatch.isBye = true;
       nextRoundMatches.push(byeMatch);
-      
+
       draft.rounds.push(nextRoundMatches);
       return;
     }
@@ -111,23 +143,23 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
       draft.pendingByeSelection = null;
       return;
     }
-    
+
     draft.rounds[roundIdx][matchIdx].winner = winner;
     const allDone = draft.rounds[roundIdx].every(m => m.winner !== null);
-    
+
     // 3. Trigger next round dynamically when current round is completed
     if (allDone && !draft.rounds[roundIdx + 1] && !draft.champion) {
       const winners = draft.rounds[roundIdx].map(m => m.winner);
-      
+
       if (winners.length === 1) {
         draft.champion = winners[0];
       } else if (winners.length % 2 !== 0) {
-        draft.pendingByeSelection = winners; // Ask the UI for a Bye
+        draft.pendingByeSelection = winners;
       } else {
         let advancing = [...winners];
         const nextRoundMatches = [];
         const rn = roundIdx + 2;
-        
+
         // Reverse Order Matchmaking (1st vs Last)
         let left = 0;
         let right = advancing.length - 1;
@@ -136,7 +168,7 @@ export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, bye
           left++;
           right--;
         }
-        
+
         draft.rounds.push(nextRoundMatches);
       }
     }
@@ -177,13 +209,13 @@ export function advanceWinnerDE(bracket, roundIdx, matchIdx, winner) {
     const loser = match.p1?.id === winner?.id ? match.p2 : match.p1
     match.winner = winner
     const nextW = draft.wRounds[roundIdx + 1]
-    
+
     if (nextW) {
       nextW[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
     } else {
       draft.grandFinal.p1 = winner
     }
-    
+
     if (loser) {
       if (roundIdx === 0) {
         const lMatchIdx = Math.floor(matchIdx / 2)
@@ -207,14 +239,13 @@ export function advanceLoserDE(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
     draft.lRounds[roundIdx][matchIdx].winner = winner
     const nextL = draft.lRounds[roundIdx + 1]
-    
+
     if (nextL) {
       const nextMatchIdx = Math.floor(matchIdx / 2)
       const targetMatch = nextL[nextMatchIdx] || nextL[0]
       if (targetMatch) {
-        // Assign winner to the available slot safely
         if (!targetMatch.p1) targetMatch.p1 = winner
-        else targetMatch.p1 = winner // Retaining original logic from your engine
+        else targetMatch.p1 = winner
       }
     } else {
       draft.grandFinal.p2 = winner
