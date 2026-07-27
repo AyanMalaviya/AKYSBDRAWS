@@ -18,26 +18,15 @@ const makeMatch = (p1, p2, round, bracket = 'winners') => ({
 
 const nextPow2 = n => Math.pow(2, Math.ceil(Math.log2(n)))
 
-/**
- * Snake-seed an array of players for single-elim so that:
- *   - seed 1 (index 0) is placed last → gets the bye when player count < nextPow2
- *   - matchups follow 1 vs n, 2 vs n-1, ... (standard bracket seeding)
- *
- * Players are expected to arrive sorted best-first (index 0 = top rank).
- */
 function snakeSeed(players) {
   const size = nextPow2(players.length)
-  // Pad to next power of 2 with nulls at the end
   const seeded = [...players]
   while (seeded.length < size) seeded.push(null)
 
-  // Build slots using 1-vs-n snake pairing
-  // Result: pairs are [0,n-1], [n/2, n/2-1] etc. (standard SE seeding)
   const slots = new Array(size)
   let lo = 0, hi = size - 1
   for (let i = 0; i < seeded.length; i++) {
-    // Even positions → fill from top (lo), odd positions → fill from bottom (hi)
-    // This ensures seed 1 ends up in the last slot (bye slot when not pow2)
+
     if (i % 2 === 0) { slots[lo] = seeded[i]; lo++ }
     else             { slots[hi] = seeded[i]; hi-- }
   }
@@ -63,7 +52,7 @@ function autoAdvanceByesInRound(draftRounds, roundIdx) {
 /* --- SINGLE ELIMINATION --- */
 export function generateSingleElim(players) {
   const size   = nextPow2(players.length)
-  const slots  = snakeSeed(players)   // seed 1 gets the last slot → bye if needed
+  const slots  = snakeSeed(players)
 
   const rounds = []
   let cur = []
@@ -85,7 +74,6 @@ export function generateSingleElim(players) {
   })
 }
 
-// Shared helper: advance winner in single-elim rounds with optional score
 function _advanceSingleElimDraft(draft, roundIdx, matchIdx, winner, score1, score2) {
   if (winner === null) {
     if (draft.rounds[roundIdx][matchIdx].isBye) return
@@ -130,15 +118,21 @@ export function advanceSingleElimWithScore(bracket, roundIdx, matchIdx, score1, 
   })
 }
 
-/* --- STAGE 2 / STAGE 3 CUSTOM ELIMINATION --- */
 export function generateStage2Elim(players) {
-  // Snake-seed: top seed gets the bye if player count is odd
-  const size  = nextPow2(players.length)
-  const slots = snakeSeed(players)
+
+  const isPow2 = (n) => n > 0 && (n & (n - 1)) === 0
+  let slots
+  if (isPow2(players.length)) {
+    slots = [...players]
+  } else {
+    const size = nextPow2(players.length)
+    slots = [...players]
+    while (slots.length < size) slots.push(null)
+  }
 
   const rounds = []
   const cur    = []
-  for (let i = 0; i < size; i += 2) {
+  for (let i = 0; i < slots.length; i += 2) {
     cur.push(makeMatch(slots[i], slots[i + 1] ?? null, 1, 'stage2'))
   }
   rounds.push(cur)
@@ -151,7 +145,6 @@ export function generateStage2Elim(players) {
   })
 }
 
-// Shared helper: finalize a stage2 match with winner (+ optional scores) and build next round
 function _finalizeStage2Match(draft, roundIdx, matchIdx, winner, score1, score2) {
   if (winner === null) {
     draft.rounds[roundIdx][matchIdx].winner = null
@@ -177,7 +170,6 @@ function _finalizeStage2Match(draft, roundIdx, matchIdx, winner, score1, score2)
     } else {
       const nextRoundMatches = []
       const rn = roundIdx + 2
-      // Snake-seed the next round winners too
       let left = 0, right = winners.length - 1
       while (left < right) {
         nextRoundMatches.push(makeMatch(winners[left], winners[right], rn, 'stage2'))

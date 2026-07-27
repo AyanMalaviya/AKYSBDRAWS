@@ -8,29 +8,8 @@ import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim } from './
 import { generateGroups, reassignTagsByStandings } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
-// ── Navigation Stack ──────────────────────────────────────────────────────────
-//
-// We maintain our own in-memory stack of { view, tournament, groups, stage2 }
-// frames. Every navigate() push appends a frame and calls window.history.pushState
-// so the browser back button fires popstate. On popstate we pop our own stack
-// instead of trying to reconstruct state from the History API state object.
-//
-// Rules:
-//   • The stack ALWAYS has at least one frame (home). We never pop the last one
-//     so the app never exits on back-swipe.
-//   • navigate() clears frames above the current pointer when branching.
-//   • handleHome() resets to a single home frame.
-//   • Opening a tournament pushes frames for each stage it already has so that
-//     back from stage2 lands on groups, and back from groups lands on home.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const HOME_FRAME = { view: 'home', tournament: null, groups: null, stage2: null }
 
-/**
- * Auto-pick the bye recipient from a list of players.
- * Priority: best scoreDiff → most wins → most scoredFor → alphabetical.
- * (Matches the scoreboard sort order so the #1 player always gets the bye.)
- */
 function pickByePlayer(players) {
   if (!players || players.length === 0) return null
   return [...players].sort((a, b) =>
@@ -42,7 +21,6 @@ function pickByePlayer(players) {
 }
 
 export default function App() {
-  // Current rendered state
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
   const [groups, setGroups]         = useState(null)
@@ -51,11 +29,9 @@ export default function App() {
 
   const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
 
-  // In-memory navigation stack
   const stackRef = useRef([HOME_FRAME])
   const isPushingRef = useRef(false)
 
-  // FIX: Keep refs to latest tournament/groups so callbacks never close over stale state
   const tournamentRef = useRef(tournament)
   const groupsRef     = useRef(groups)
   useEffect(() => { tournamentRef.current = tournament }, [tournament])
@@ -154,9 +130,7 @@ export default function App() {
     }
     upsertHistory(t)
     stackRef.current = [HOME_FRAME]
-    // FIX: pass groups explicitly in navigate so the frame has them immediately;
-    // the view === 'groups' render guard now reads from the frame in stackRef
-    // rather than relying on async batched state, preventing the blank screen.
+
     navigate('groups', { tournament: t, groups: g, stage2: null })
   }
 
@@ -173,10 +147,6 @@ export default function App() {
     })
   }, [upsertHistory])
 
-  // FIX: removed `tournament` and `groups` from deps — they caused stale closures
-  // because setTournament/setGroups update state asynchronously but the callback
-  // was recreated only when those state values changed, so intermediate calls
-  // saw old snapshots. Now reads latest values from refs.
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentTournament = tournamentRef.current
     const currentGroups     = groupsRef.current
@@ -207,8 +177,6 @@ export default function App() {
 
     let bracket = generateStage2Elim(advancers)
 
-    // Auto-resolve bye: if odd players, immediately give the bye to the top
-    // scorer (best SD → wins → scoredFor) so no manual selection is needed.
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
       if (byePlayer) {
@@ -229,7 +197,6 @@ export default function App() {
   }, [upsertHistory, navigate])
 
   const handleStage2BracketUpdate = useCallback((updatedBracket) => {
-    // Auto-resolve pending bye whenever a new round is built with odd winners
     let resolvedBracket = updatedBracket
     if (resolvedBracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(resolvedBracket.pendingByeSelection)
@@ -342,9 +309,7 @@ export default function App() {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
 
-  // FIX: derive groups/stage2 for rendering directly from the top stack frame
-  // so the UI reflects what navigate() committed even before React flushes the
-  // batched setGroups/setView state updates to the DOM.
+
   const topFrame      = stackRef.current[stackRef.current.length - 1]
   const renderGroups  = topFrame?.view === 'groups'  ? (topFrame.groups  ?? groups)  : groups
   const renderStage2  = topFrame?.view === 'stage2'  ? (topFrame.stage2  ?? stage2)  : stage2
@@ -410,17 +375,13 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
 
-        {/* FIX: use renderGroups (from stack frame) instead of bare `groups` state
-            so the component mounts on the same render that navigate() fires,
-            not one render later when batched state finally settles. */}
         {view === 'groups' && renderGroups && (
           <GroupView
             groups={renderGroups}
             onGroupsUpdate={handleGroupsUpdate}
             onBack={handleHome}
             onAdvanceToStage2={handleAdvanceToStage2}
-            hasStage2={!!stage2}
-          />
+            hasStage2={!!(tournament?.stage2)}/>
         )}
 
         {view === 'stage2' && renderStage2 && (
