@@ -149,6 +149,56 @@ export function advanceSingleElimWithScore(bracket, roundIdx, matchIdx, score1, 
   })
 }
 
+function recomputeBracketStandings(draft) {
+  // 1. Reset all standings to zero
+  draft.standings = draft.standings.map(s => ({
+    ...s, played: 0, wins: 0, draws: 0, losses: 0, points: 0,
+    scoredFor: 0, scoredAgainst: 0, scoreDiff: 0
+  }))
+
+  // 2. Tally up points and score differentials from all finished matches
+  draft.rounds.forEach(round => {
+    round.forEach(m => {
+      if (!m.winner || m.isBye) return
+
+      const p1s = draft.standings.find(s => s.id === m.p1?.id)
+      const p2s = draft.standings.find(s => s.id === m.p2?.id)
+      if (!p1s || !p2s) return
+
+      // Handle scores
+      if (m.score1 != null && m.score2 != null) {
+        p1s.scoredFor += m.score1; p1s.scoredAgainst += m.score2
+        p2s.scoredFor += m.score2; p2s.scoredAgainst += m.score1
+      }
+
+      // Handle match outcomes
+      if (m.winner === 'draw') {
+        p1s.draws++; p1s.points++; p1s.played++
+        p2s.draws++; p2s.points++; p2s.played++
+      } else if (m.winner.id === m.p1.id) {
+        p1s.wins++; p1s.points += 3; p1s.played++
+        p2s.losses++; p2s.played++
+      } else if (m.winner.id === m.p2.id) {
+        p2s.wins++; p2s.points += 3; p2s.played++
+        p1s.losses++; p1s.played++
+      }
+    })
+  })
+
+  // 3. Calculate Score Difference (SD) and Sort
+  draft.standings.forEach(s => { s.scoreDiff = s.scoredFor - s.scoredAgainst })
+  draft.standings.sort((a, b) =>
+    (b.points    - a.points)    ||
+    (b.scoreDiff - a.scoreDiff) ||
+    (b.scoredFor - a.scoredFor) ||
+    (a.name || '').localeCompare(b.name || '')
+  )
+
+  // 4. Auto-assign champion if all matches are completed
+  const allDone = draft.rounds.every(r => r.every(m => m.winner || m.isBye))
+  draft.champion = allDone ? draft.standings[0] : null
+}
+
 export function generateStage2Elim(players) {
   // Pass the raw players array directly instead of padWithByes(players)
   const slots = players
@@ -332,42 +382,63 @@ export function generateRoundRobin(players) {
   const list = players.length % 2 === 0 ? [...players] : [...players, { name: 'BYE', id: 'bye' }]
   const total = list.length
   const rounds = []
+  
   for (let r = 0; r < total - 1; r++) {
     const roundMatches = []
     for (let i = 0; i < total / 2; i++) {
       const p1 = list[i], p2 = list[total - 1 - i]
-      if (p1.id !== 'bye' && p2.id !== 'bye') roundMatches.push(makeMatch(p1, p2, r + 1, 'round_robin'))
+      if (p1.id !== 'bye' && p2.id !== 'bye') {
+        roundMatches.push(makeMatch(p1, p2, r + 1, 'round_robin'))
+      }
     }
     rounds.push(roundMatches)
     list.splice(1, 0, list.pop())
   }
-  const standings = players.map(p => ({ ...p, played: 0, wins: 0, draws: 0, losses: 0, points: 0 }))
+  
+  // Added scoredFor, scoredAgainst, and scoreDiff to initial state
+  const standings = players.map(p => ({ 
+    ...p, 
+    played: 0, wins: 0, draws: 0, losses: 0, points: 0,
+    scoredFor: 0, scoredAgainst: 0, scoreDiff: 0
+  }))
+  
   return { type: 'round_robin', rounds, standings, champion: null }
 }
 
-export function advanceWinnerRoundRobin(bracket, roundIdx, matchIdx, winner, loser) {
+export function advanceWinnerRoundRobin(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
-    draft.rounds[roundIdx][matchIdx].winner = winner
-    draft.standings = draft.standings.map(s => {
-      if (s.id === winner.id) return { ...s, wins: s.wins + 1, points: s.points + 3, played: s.played + 1 }
-      if (loser && s.id === loser.id) return { ...s, losses: s.losses + 1, played: s.played + 1 }
-      return s
-    })
-    draft.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
-    if (draft.rounds.every(r => r.every(m => m.winner))) draft.champion = draft.standings[0]
+    const match = draft.rounds[roundIdx][matchIdx]
+    match.winner = winner
+    match.score1 = null // Clear scores if switching to manual winner override
+    match.score2 = null
+    recomputeBracketStandings(draft)
   })
 }
 
 export function setDrawRoundRobin(bracket, roundIdx, matchIdx) {
   return produce(bracket, draft => {
-    draft.rounds[roundIdx][matchIdx].winner = 'draw'
-    draft.standings = draft.standings.map(s => {
-      const m = draft.rounds[roundIdx][matchIdx]
-      if (s.id === m.p1?.id || s.id === m.p2?.id)
-        return { ...s, draws: s.draws + 1, points: s.points + 1, played: s.played + 1 }
-      return s
-    })
-    draft.standings.sort((a, b) => b.points - a.points || b.wins - a.wins)
+    const match = draft.rounds[roundIdx][matchIdx]
+    match.winner = 'draw'
+    match.score1 = null 
+    match.score2 = null
+    recomputeBracketStandings(draft)
+  })
+}
+
+export function advanceRoundRobinWithScore(bracket, roundIdx, matchIdx, score1, score2) {
+  return produce(bracket, draft => {
+    const match = draft.rounds[roundIdx][matchIdx]
+    if (!match.p1 || !match.p2) return
+    
+    // Automatically assign the winner based on numeric values
+    if (score1 > score2) match.winner = match.p1
+    else if (score2 > score1) match.winner = match.p2
+    else match.winner = 'draw'
+    
+    match.score1 = score1
+    match.score2 = score2
+    
+    recomputeBracketStandings(draft)
   })
 }
 
