@@ -363,7 +363,7 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
   )
 }
 
-export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2 }) {
+export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2, onGoToStage2 }) {
   const [isEditing, setIsEditing]                   = useState(false)
   const [draftGroups, setDraftGroups]               = useState(null)
   const [showAdvancerModal, setShowAdvancerModal]   = useState(false)
@@ -578,7 +578,22 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             )}
           </div>
 
-          {showStage2Config && confirmedAdvancers ? (
+          {hasStage2 ? (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+                <strong style={{ color: 'var(--white-soft)' }}>Stage 2 has already been generated.</strong>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ flex: 1, minWidth: 180, fontWeight: 800 }}
+                  onClick={onGoToStage2}
+                >
+                  🚀 Go to Stage 2 →
+                </button>
+              </div>
+            </motion.div>
+          ) : showStage2Config && confirmedAdvancers ? (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>
                 <strong style={{ color: 'var(--green)' }}>{confirmedAdvancers.length} players</strong> selected to advance

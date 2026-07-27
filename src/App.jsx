@@ -115,8 +115,11 @@ export default function App() {
       const u = { ...prev, bracket: updatedBracket }
       if (isFinished) u.isArchived = true
       upsertHistory(u)
-      const stack = stackRef.current
-      if (stack.length > 0) stack[stack.length - 1] = { ...stack[stack.length - 1], tournament: u }
+      
+      stackRef.current.forEach((f, i) => {
+        stackRef.current[i] = { ...f, tournament: u }
+      })
+      
       return u
     })
   }, [upsertHistory])
@@ -141,7 +144,9 @@ export default function App() {
       const u = { ...prev, groups: updatedGroups }
       upsertHistory(u)
       stackRef.current.forEach((f, i) => {
-        if (f.view === 'groups') stackRef.current[i] = { ...f, groups: updatedGroups, tournament: u }
+        // FIX: Sync tournament state across the entire stack
+        stackRef.current[i] = { ...f, tournament: u }
+        if (f.view === 'groups') stackRef.current[i].groups = updatedGroups
       })
       return u
     })
@@ -217,7 +222,9 @@ export default function App() {
         if (isFinished) u.isArchived = true
         upsertHistory(u)
         stackRef.current.forEach((f, i) => {
-          if (f.view === 'stage2') stackRef.current[i] = { ...f, stage2: s2, tournament: u }
+          // FIX: Sync tournament state across the entire stack
+          stackRef.current[i] = { ...f, tournament: u }
+          if (f.view === 'stage2') stackRef.current[i].stage2 = s2
         })
         return u
       })
@@ -233,7 +240,12 @@ export default function App() {
         const u = { ...t, stage2: s2 }
         upsertHistory(u)
         stackRef.current.forEach((f, i) => {
-          if (f.view === 'stage2') stackRef.current[i] = { ...f, stage2: s2, groups: updatedGroups, tournament: u }
+          // FIX: Sync tournament state across the entire stack
+          stackRef.current[i] = { ...f, tournament: u }
+          if (f.view === 'stage2') {
+            stackRef.current[i].stage2 = s2
+            stackRef.current[i].groups = updatedGroups
+          }
         })
         return u
       })
@@ -243,28 +255,44 @@ export default function App() {
 
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentGroups = groupsRef.current
+    
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(advancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s3 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
+      
       setTournament(prev => {
         const u = { ...prev, stage2: s3, groups: newGroups }
         upsertHistory(u)
+        
+        // FIX: Sync tournament state across the stack
+        stackRef.current.forEach((f, i) => {
+          stackRef.current[i] = { ...f, tournament: u }
+        })
+        
         return u
       })
       navigate('stage2', { groups: newGroups, stage2: s3 })
       return
     }
+    
     let bracket = generateStage2Elim(advancers)
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
       if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
     }
     const s3 = { type: 'knockout', players: advancers, bracket }
+    
     setTournament(prev => {
       const u = { ...prev, stage2: s3 }
       upsertHistory(u)
+      
+      // FIX: Sync tournament state across the stack
+      stackRef.current.forEach((f, i) => {
+        stackRef.current[i] = { ...f, tournament: u }
+      })
+      
       return u
     })
     navigate('stage2', { groups: currentGroups, stage2: s3 })
@@ -381,7 +409,13 @@ export default function App() {
             onGroupsUpdate={handleGroupsUpdate}
             onBack={handleHome}
             onAdvanceToStage2={handleAdvanceToStage2}
-            hasStage2={!!(tournament?.stage2)}/>
+            hasStage2={!!(tournament?.stage2)}
+            onGoToStage2={() => navigate('stage2', { 
+              tournament: tournament, 
+              groups: renderGroups, 
+              stage2: tournament?.stage2 
+            })}
+          />
         )}
 
         {view === 'stage2' && renderStage2 && (
