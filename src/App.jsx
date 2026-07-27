@@ -287,8 +287,6 @@ export default function App() {
     setTournament(prev => {
       const u = { ...prev, stage2: s3 }
       upsertHistory(u)
-      
-      // FIX: Sync tournament state across the stack
       stackRef.current.forEach((f, i) => {
         stackRef.current[i] = { ...f, tournament: u }
       })

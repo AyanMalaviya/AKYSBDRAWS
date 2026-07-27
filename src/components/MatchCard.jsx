@@ -1,5 +1,9 @@
 import React, { memo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { TAG_META } from '../engine/groupEngine.js'
+
+// Helper to pull the same tag colors used in GroupView
+const tagColor = (tag) => TAG_META[tag || 'C']?.color || TAG_META['C'].color
 
 // ── Inline Score Entry Modal ──────────────────────────────────────────
 function ScoreModal({ match, onConfirm, onClose }) {
@@ -44,7 +48,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8,
+            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p1.tag), marginBottom: 8,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {match.p1.name}
             </div>
@@ -63,7 +67,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
           </div>
           <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: 2 }}>VS</div>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8,
+            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p2.tag), marginBottom: 8,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {match.p2.name}
             </div>
@@ -129,19 +133,64 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
   const isBye  = !!match.isBye
   const p1     = match.p1
   const p2     = match.p2
-  const canAct = p1 && p2 && !isBye   // both players present, not a bye
+  const canAct = p1 && p2 && !isBye
 
   const hasScore = match.score1 != null && match.score2 != null
-
-  const rowCls = (player) => {
-    if (!done) return player ? 'match-row' : 'match-row tbd'
-    if (match.winner === 'draw') return 'match-row'
-    return match.winner?.id === player?.id ? 'match-row winner' : 'match-row loser'
-  }
 
   const handleScoreConfirm = (s1, s2) => {
     setScoreModal(false)
     onScore?.(s1, s2)
+  }
+
+  // Prevents text overlapping with the absolute positioned buttons
+  const rightPadding = isBye ? 40 : 54; 
+
+  const renderPlayer = (player, score, isTop) => {
+    const isWinner = done && match.winner?.id === player?.id
+    const isDraw = done && match.winner === 'draw'
+
+    return (
+      <div
+        onClick={() => canAct && !done && onWin?.(player)}
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          padding: `0 ${rightPadding}px 0 12px`,
+          background: isWinner ? 'rgba(34,214,122,0.12)' : isDraw ? 'rgba(212,160,23,0.1)' : 'transparent',
+          borderBottom: isTop ? '1px solid rgba(255,255,255,0.05)' : 'none',
+          cursor: (canAct && !done) ? 'pointer' : 'default',
+          transition: 'background 0.2s'
+        }}
+      >
+        <span style={{
+          fontWeight: isWinner ? 800 : 700,
+          fontSize: 14,
+          color: player ? tagColor(player.tag) : 'var(--muted)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '110px'
+        }}>
+          {player ? player.name : 'TBD'}
+        </span>
+
+        {hasScore && (
+          <span style={{
+            marginLeft: 'auto',
+            fontWeight: 800,
+            fontSize: 14,
+            color: isWinner ? 'var(--green)' : isDraw ? 'var(--gold-light)' : 'var(--white-soft)'
+          }}>
+            {score}
+          </span>
+        )}
+
+        {isWinner && !hasScore && (
+          <span style={{ marginLeft: 'auto', color: 'var(--green)', fontSize: 14, fontWeight: 800 }}>✓</span>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -156,78 +205,90 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
         )}
       </AnimatePresence>
 
-      <div className="match-card">
-        {/* Bye badge */}
+      <div
+        className="match-card"
+        style={{
+          height: 82, // Hardcoded to 82px to maintain SVG line alignments
+          background: 'var(--surface2, rgba(20,20,30,0.8))',
+          border: '1px solid var(--border, rgba(255,255,255,0.1))',
+          borderRadius: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Player Rows */}
+        {renderPlayer(p1, match.score1, true)}
+        {renderPlayer(p2, match.score2, false)}
+
+        {/* Bye Badge */}
         {isBye && (
           <div style={{
-            position: 'absolute', top: 4, right: 6,
-            fontSize: 9, fontWeight: 700, color: 'var(--muted)',
-            background: 'rgba(255,255,255,0.06)', borderRadius: 4, padding: '1px 5px',
-            letterSpacing: 0.5,
-          }}>BYE</div>
+            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 10, fontWeight: 800, color: 'var(--muted)',
+            background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: '4px 8px',
+            letterSpacing: 1
+          }}>
+            BYE
+          </div>
         )}
 
-        <div
-          className={rowCls(p1)}
-          onClick={() => canAct && !done && onWin?.(p1, p2)}
-        >
-          <span>{p1?.name || 'TBD'}</span>
-          {done && !isBye && match.winner?.id === p1?.id && hasScore && (
-            <span style={{ color: 'var(--neon-green)', fontSize: 10, marginLeft: 4, fontWeight: 800 }}>
-              {match.score1}–{match.score2}
-            </span>
-          )}
-          {done && match.winner?.id === p1?.id && (
-            <span style={{ color: 'var(--neon-green)', fontSize: 10, marginLeft: 2 }}>✓</span>
-          )}
-        </div>
+        {/* Action Buttons Overlay */}
+        {!isBye && (
+          <div style={{
+            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+            display: 'flex', gap: 6, zIndex: 10
+          }}>
+            {canAct && !done && (
+              <button
+                title="Enter score"
+                onClick={(e) => { e.stopPropagation(); setScoreModal(true) }}
+                style={{
+                  background: 'rgba(0,212,255,0.1)',
+                  border: '1px solid rgba(0,212,255,0.35)',
+                  color: 'var(--cyan, #00d4ff)',
+                  borderRadius: 6, width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}
+              >📊</button>
+            )}
 
-        <div className="match-vs">
-          {hasScore && !isBye
-            ? <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted)', letterSpacing: 1 }}>
-                {match.score1}–{match.score2}
-              </span>
-            : 'VS'
-          }
-        </div>
+            {showDraw && !done && canAct && (
+              <button
+                title="Mark Draw"
+                onClick={(e) => { e.stopPropagation(); onDraw?.(); }}
+                style={{
+                  background: 'rgba(212,160,23,0.1)',
+                  border: '1px solid rgba(212,160,23,0.35)',
+                  color: 'var(--gold-light)',
+                  borderRadius: 6, width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}
+              >D</button>
+            )}
 
-        <div
-          className={rowCls(p2)}
-          onClick={() => canAct && !done && onWin?.(p2, p1)}
-        >
-          <span>{p2?.name || 'TBD'}</span>
-          {done && !isBye && match.winner?.id === p2?.id && hasScore && (
-            <span style={{ color: 'var(--neon-green)', fontSize: 10, marginLeft: 4, fontWeight: 800 }}>
-              {match.score2}–{match.score1}
-            </span>
-          )}
-          {done && match.winner?.id === p2?.id && (
-            <span style={{ color: 'var(--neon-green)', fontSize: 10, marginLeft: 2 }}>✓</span>
-          )}
-        </div>
-
-        {/* Score entry button — only when both players present and not a bye */}
-        {canAct && (
-          <button
-            title="Enter score"
-            onClick={e => { e.stopPropagation(); setScoreModal(true) }}
-            style={{
-              background: hasScore ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${hasScore ? 'rgba(0,212,255,0.35)' : 'rgba(255,255,255,0.1)'}`,
-              color: hasScore ? 'var(--cyan, #00d4ff)' : 'var(--muted)',
-              borderRadius: 6, padding: '3px 7px', fontSize: 13,
-              cursor: 'pointer', flexShrink: 0, lineHeight: 1,
-              transition: 'all 0.15s',
-            }}
-          >📊</button>
-        )}
-
-        {showDraw && !done && canAct && (
-          <button className="match-draw-btn" onClick={() => onDraw?.()}>Draw</button>
-        )}
-
-        {done && !isBye && (
-          <button className="match-undo" onClick={() => onWin?.(null)}>undo</button>
+            {done && (
+              <button
+                title="Undo Match"
+                onClick={(e) => { e.stopPropagation(); onWin?.(null); }}
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: 'var(--white-soft)',
+                  borderRadius: 6, width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 14, cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}
+              >↺</button>
+            )}
+          </div>
         )}
       </div>
     </>
