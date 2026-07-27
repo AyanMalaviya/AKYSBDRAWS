@@ -557,17 +557,20 @@ export default function App() {
         )}
 
         {view === 'home' && (
-          <Setup
-            onStart={handleStart}
-            onGroupStart={handleGroupStart}
-            onArchiveGroup={archiveEntry}
-            onOpenGroup={(id, targetView = 'groups') => {
-              const entry = history.find(e => e.id === id)
-              if (entry) handleRestore(entry, targetView)
-              else alert('Tournament data not found in history.')
-            }}
-            history={history}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            <Setup
+              onStart={handleStart}
+              onGroupStart={handleGroupStart}
+              onArchiveGroup={archiveEntry}
+              onOpenGroup={(id, targetView = 'groups') => {
+                const entry = history.find(e => e.id === id)
+                if (entry) handleRestore(entry, entry.stage2 ? 'stage2' : targetView)
+                else alert('Tournament data not found in history.')
+              }}
+              history={history}
+            />
+          </div>
         )}
 
         {view === 'bracket' && tournament && (

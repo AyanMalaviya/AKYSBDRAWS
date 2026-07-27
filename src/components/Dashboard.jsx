@@ -100,7 +100,10 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                 {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
               </div>
               <div className="hcard-actions">
-                <button className="btn btn-ghost btn-sm" onClick={() => onRestore(entry)}>
+                <button 
+                  className="btn btn-ghost btn-sm" 
+                  onClick={() => onRestore(entry, entry.stage2 ? 'stage2' : 'groups')}
+                >
                   {isArchivedSection ? '↩ Restore' : '▶ Resume Live'}
                 </button>
                 <button className="btn btn-danger btn-sm" onClick={() => setConfirmId(entry.id)}>Delete</button>
