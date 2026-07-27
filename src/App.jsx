@@ -196,7 +196,6 @@ export default function App() {
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentTournament = tournamentRef.current
     const currentGroups     = groupsRef.current
-    
 
     // Rank 0 = A, Rank 1 = B, Rank 2 = C, Others = D
     const taggedAdvancers = advancers.map(p => {
@@ -232,9 +231,26 @@ export default function App() {
       return
     }
 
-    // Pass through custom seeding to force A vs C and B vs B
-    const seededKnockout = seedKnockoutPlayers(taggedAdvancers)
+    // --- NEW LOGIC FOR KNOCKOUT BYES ---
+    let playersToSeed = [...taggedAdvancers]
+    let round1ByePlayer = null
+
+    // If there is an odd number of players, extract the absolute best player for the bye
+    if (playersToSeed.length % 2 !== 0) {
+      round1ByePlayer = pickByePlayer(playersToSeed)
+      playersToSeed = playersToSeed.filter(p => p.id !== round1ByePlayer.id)
+    }
+
+    // Seed the remaining players normally (A vs C, B vs B)
+    const seededKnockout = seedKnockoutPlayers(playersToSeed)
+
+    // Push the best player to the very end so the bracket engine pairs them with 'null'
+    if (round1ByePlayer) {
+      seededKnockout.push(round1ByePlayer)
+    }
+
     let bracket = generateStage2Elim(seededKnockout)
+    // -----------------------------------
 
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
@@ -336,9 +352,26 @@ export default function App() {
       return
     }
 
-    // Pass through custom seeding to force A vs C and B vs B
-    const seededKnockout = seedKnockoutPlayers(taggedAdvancers)
+    // --- NEW LOGIC FOR KNOCKOUT BYES ---
+    let playersToSeed = [...taggedAdvancers]
+    let round1ByePlayer = null
+
+    // If there is an odd number of players, extract the absolute best player for the bye
+    if (playersToSeed.length % 2 !== 0) {
+      round1ByePlayer = pickByePlayer(playersToSeed)
+      playersToSeed = playersToSeed.filter(p => p.id !== round1ByePlayer.id)
+    }
+
+    // Seed the remaining players normally (A vs C, B vs B)
+    const seededKnockout = seedKnockoutPlayers(playersToSeed)
+
+    // Push the best player to the very end so the bracket engine pairs them with 'null'
+    if (round1ByePlayer) {
+      seededKnockout.push(round1ByePlayer)
+    }
+
     let bracket = generateStage2Elim(seededKnockout)
+    // -----------------------------------
     
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
