@@ -32,7 +32,7 @@
 
 .footer-text { color: rgba(232,230,245,0.35); }
 .main-dev { font-size: 9px;  font-weight: 700; letter-spacing: 0.09em; }
-.sub-dev  { font-size: 7px;  font-weight: 700; letter-spacing: 0.07em; }
+.sub-dev  { font-size: 2px;  font-weight: 700; letter-spacing: 0.07em; }
 
 .footer-link {
   position: relative;

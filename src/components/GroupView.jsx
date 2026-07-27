@@ -366,8 +366,17 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
 }
 
 export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToStage2, hasStage2, onGoToStage2 }) {
-  const [isEditing, setIsEditing]                   = useState(false)
-  const [draftGroups, setDraftGroups]               = useState(null)
+  const [isEditing, setIsEditing] = useState(() => {
+    const savedEditing = localStorage.getItem('akysb_is_editing') === 'true'
+    const hasDraft = !!localStorage.getItem('akysb_draft_groups')
+    return savedEditing && hasDraft
+  })
+  const [draftGroups, setDraftGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem('akysb_draft_groups')
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  })
   const [showAdvancerModal, setShowAdvancerModal]   = useState(false)
   const [advancersPerGroup, setAdvancersPerGroup]   = useState(2)
   const [stage2Type, setStage2Type]                 = useState('knockout')
@@ -405,8 +414,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   }, [])
 
   const handleCancelEdit = useCallback(() => {
-    setIsEditing(false)
-    setDraftGroups(null)
+    if (window.confirm("⚠️ Cancel edits? Any unsaved changes will be lost.")) {
+      setIsEditing(false)
+      setDraftGroups(null)
+    }
   }, [])
 
   const resetStage2Flow = useCallback(() => {
@@ -430,6 +441,15 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   }, [resetStage2Flow])
 
   const handleEditAction = useCallback((action, groupId, playerId, payload) => {
+    
+    // Safeguards against accidental data loss
+    if (action === 'delete_group') {
+      if (!window.confirm("⚠️ Are you sure you want to delete this entire group and all its players?")) return
+    }
+    if (action === 'remove_player') {
+      if (!window.confirm("⚠️ Remove this player from the group?")) return
+    }
+
     setDraftGroups(prev => {
       if (!prev) return prev
       let next = prev
@@ -517,6 +537,15 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   }, [confirmedAdvancers, finalAdvancerList, stage2Type])
 
   const posEmoji = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣']
+
+  useEffect(() => {
+    localStorage.setItem('akysb_is_editing', isEditing)
+    if (isEditing && draftGroups) {
+      localStorage.setItem('akysb_draft_groups', JSON.stringify(draftGroups))
+    } else {
+      localStorage.removeItem('akysb_draft_groups')
+    }
+  }, [isEditing, draftGroups])
 
   return (
     <div className="group-view" style={{ paddingTop: 10 }}>
