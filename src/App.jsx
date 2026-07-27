@@ -55,6 +55,12 @@ export default function App() {
   const stackRef = useRef([HOME_FRAME])
   const isPushingRef = useRef(false)
 
+  // FIX: Keep refs to latest tournament/groups so callbacks never close over stale state
+  const tournamentRef = useRef(tournament)
+  const groupsRef     = useRef(groups)
+  useEffect(() => { tournamentRef.current = tournament }, [tournament])
+  useEffect(() => { groupsRef.current = groups }, [groups])
+
   const applyFrame = useCallback((frame) => {
     setView(frame.view)
     setTournament(frame.tournament)
@@ -148,6 +154,9 @@ export default function App() {
     }
     upsertHistory(t)
     stackRef.current = [HOME_FRAME]
+    // FIX: pass groups explicitly in navigate so the frame has them immediately;
+    // the view === 'groups' render guard now reads from the frame in stackRef
+    // rather than relying on async batched state, preventing the blank screen.
     navigate('groups', { tournament: t, groups: g, stage2: null })
   }
 
@@ -164,7 +173,14 @@ export default function App() {
     })
   }, [upsertHistory])
 
+  // FIX: removed `tournament` and `groups` from deps — they caused stale closures
+  // because setTournament/setGroups update state asynchronously but the callback
+  // was recreated only when those state values changed, so intermediate calls
+  // saw old snapshots. Now reads latest values from refs.
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
+    const currentTournament = tournamentRef.current
+    const currentGroups     = groupsRef.current
+
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(advancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
@@ -182,10 +198,10 @@ export default function App() {
       return
     }
 
-    const prevIds = tournament?.stage2?.players?.map(p => p.id).join(',') || ''
+    const prevIds = currentTournament?.stage2?.players?.map(p => p.id).join(',') || ''
     const newIds  = advancers.map(p => p.id).join(',')
-    if (tournament?.stage2 && tournament.stage2.type !== 'groups' && prevIds === newIds) {
-      navigate('stage2', { tournament, groups, stage2: tournament.stage2 })
+    if (currentTournament?.stage2 && currentTournament.stage2.type !== 'groups' && prevIds === newIds) {
+      navigate('stage2', { tournament: currentTournament, groups: currentGroups, stage2: currentTournament.stage2 })
       return
     }
 
@@ -209,8 +225,8 @@ export default function App() {
       })
       return u
     })
-    navigate('stage2', { groups, stage2: s2 })
-  }, [tournament, groups, upsertHistory, navigate])
+    navigate('stage2', { groups: currentGroups, stage2: s2 })
+  }, [upsertHistory, navigate])
 
   const handleStage2BracketUpdate = useCallback((updatedBracket) => {
     // Auto-resolve pending bye whenever a new round is built with odd winners
@@ -259,6 +275,7 @@ export default function App() {
   }, [upsertHistory])
 
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
+    const currentGroups = groupsRef.current
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(advancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
@@ -283,8 +300,8 @@ export default function App() {
       upsertHistory(u)
       return u
     })
-    navigate('stage2', { groups, stage2: s3 })
-  }, [groups, upsertHistory, navigate])
+    navigate('stage2', { groups: currentGroups, stage2: s3 })
+  }, [upsertHistory, navigate])
 
   const handleRestore = useCallback((entry, targetView = 'groups') => {
     stackRef.current = [HOME_FRAME]
@@ -324,6 +341,13 @@ export default function App() {
   const handleDashboard = useCallback(() => {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
+
+  // FIX: derive groups/stage2 for rendering directly from the top stack frame
+  // so the UI reflects what navigate() committed even before React flushes the
+  // batched setGroups/setView state updates to the DOM.
+  const topFrame      = stackRef.current[stackRef.current.length - 1]
+  const renderGroups  = topFrame?.view === 'groups'  ? (topFrame.groups  ?? groups)  : groups
+  const renderStage2  = topFrame?.view === 'stage2'  ? (topFrame.stage2  ?? stage2)  : stage2
 
   const s2BannerStyle = {
     display: 'flex', alignItems: 'center', gap: 12,
@@ -386,9 +410,12 @@ export default function App() {
           <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
         )}
 
-        {view === 'groups' && groups && (
+        {/* FIX: use renderGroups (from stack frame) instead of bare `groups` state
+            so the component mounts on the same render that navigate() fires,
+            not one render later when batched state finally settles. */}
+        {view === 'groups' && renderGroups && (
           <GroupView
-            groups={groups}
+            groups={renderGroups}
             onGroupsUpdate={handleGroupsUpdate}
             onBack={handleHome}
             onAdvanceToStage2={handleAdvanceToStage2}
@@ -396,16 +423,16 @@ export default function App() {
           />
         )}
 
-        {view === 'stage2' && stage2 && (
+        {view === 'stage2' && renderStage2 && (
           <div>
             <div style={s2BannerStyle}>
               <span style={{ fontSize: 24 }}>🏆</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--gold-light)' }}>
-                  Stage 2 — {stage2.type === 'groups' ? 'New Groups' : 'Knockout'}
+                  Stage 2 — {renderStage2.type === 'groups' ? 'New Groups' : 'Knockout'}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {stage2.players.length} players advancing
+                  {renderStage2.players.length} players advancing
                 </div>
               </div>
               <button
@@ -420,9 +447,9 @@ export default function App() {
               >🔙 Stage 1</button>
             </div>
 
-            {stage2.type === 'groups' && stage2.groups && (
+            {renderStage2.type === 'groups' && renderStage2.groups && (
               <GroupView
-                groups={stage2.groups}
+                groups={renderStage2.groups}
                 onGroupsUpdate={handleStage2GroupsUpdate}
                 onBack={() => window.history.back()}
                 onAdvanceToStage2={handleAdvanceToStage3}
@@ -430,13 +457,13 @@ export default function App() {
               />
             )}
 
-            {stage2.type === 'knockout' && stage2.bracket && (
+            {renderStage2.type === 'knockout' && renderStage2.bracket && (
               <BracketView
                 tournament={{
                   id: (tournament?.id || 'stage2') + '_s2',
                   format: 'stage2_elim',
-                  players: stage2.players,
-                  bracket: stage2.bracket,
+                  players: renderStage2.players,
+                  bracket: renderStage2.bracket,
                 }}
                 onUpdate={handleStage2BracketUpdate}
                 onReset={handleHome}

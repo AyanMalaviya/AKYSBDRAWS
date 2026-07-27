@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, memo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useRef, memo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   TAG_META,
@@ -385,14 +385,14 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   // ── Prop refs: always point to the latest prop, so callbacks
   //    created once never close over a stale prop value.
-  const onGroupsUpdateRef   = useRef(onGroupsUpdate)
+  const onGroupsUpdateRef    = useRef(onGroupsUpdate)
   const onAdvanceToStage2Ref = useRef(onAdvanceToStage2)
-  useEffect(() => { onGroupsUpdateRef.current   = onGroupsUpdate   }, [onGroupsUpdate])
+  useEffect(() => { onGroupsUpdateRef.current    = onGroupsUpdate    }, [onGroupsUpdate])
   useEffect(() => { onAdvanceToStage2Ref.current = onAdvanceToStage2 }, [onAdvanceToStage2])
 
-  const gridRef      = useRef(null)
-  const groupsRef    = useRef(groups)
-  groupsRef.current  = groups
+  const gridRef     = useRef(null)
+  const groupsRef   = useRef(groups)
+  groupsRef.current = groups
 
   const activeGroups = isEditing && draftGroups ? draftGroups : groups
 
@@ -404,12 +404,20 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
 
   const safeAdvancers = Math.min(advancersPerGroup, maxAdvancers)
 
-  const handleStartEdit = () => {
-    setDraftGroups(structuredClone(groups))
+  const handleStartEdit = useCallback(() => {
+    setDraftGroups(structuredClone(groupsRef.current))
     setIsEditing(true)
-  }
-  const handleSaveEdit   = () => { onGroupsUpdateRef.current(draftGroups); setIsEditing(false); setDraftGroups(null) }
-  const handleCancelEdit = () => { setIsEditing(false); setDraftGroups(null) }
+  }, [])
+
+  const handleSaveEdit = useCallback(() => {
+    setDraftGroups(prev => { onGroupsUpdateRef.current(prev); return null })
+    setIsEditing(false)
+  }, [])
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false)
+    setDraftGroups(null)
+  }, [])
 
   const resetStage2Flow = useCallback(() => {
     setConfirmedAdvancers(null)
@@ -431,18 +439,27 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     resetStage2Flow()
   }, [resetStage2Flow])
 
-  const handleEditAction = (action, groupId, playerId, payload) => {
-    let next = draftGroups
-    if (action === 'rename_group')  next = renameGroup(next, groupId, payload)
-    if (action === 'add_player')    next = addPlayerToGroup(next, groupId)
-    if (action === 'remove_player') next = removePlayerFromGroup(next, groupId, playerId)
-    if (action === 'update_player') next = updatePlayerProps(next, groupId, playerId, payload)
-    if (action === 'move_player')   next = movePlayerBetweenGroups(next, groupId, playerId, payload)
-    if (action === 'delete_group')  next = deleteGroup(next, groupId)
-    setDraftGroups(next)
-  }
+  // FIX: wrap in useCallback so GroupCard children don't re-render on every
+  // keystroke in an unrelated part of the form. Uses functional setDraftGroups
+  // to always operate on the latest draft without closing over a stale copy.
+  const handleEditAction = useCallback((action, groupId, playerId, payload) => {
+    setDraftGroups(prev => {
+      if (!prev) return prev
+      let next = prev
+      if (action === 'rename_group')  next = renameGroup(next, groupId, payload)
+      if (action === 'add_player')    next = addPlayerToGroup(next, groupId)
+      if (action === 'remove_player') next = removePlayerFromGroup(next, groupId, playerId)
+      if (action === 'update_player') next = updatePlayerProps(next, groupId, playerId, payload)
+      if (action === 'move_player')   next = movePlayerBetweenGroups(next, groupId, playerId, payload)
+      if (action === 'delete_group')  next = deleteGroup(next, groupId)
+      return next
+    })
+  }, [])
 
-  const handleCreateGroup = () => setDraftGroups(createNewGroup(draftGroups))
+  // FIX: stable callback — uses functional updater so no stale draftGroups closure
+  const handleCreateGroup = useCallback(() => {
+    setDraftGroups(prev => createNewGroup(prev))
+  }, [])
 
   const handleEliminate = useCallback((groupId, playerId) => {
     const currentGroups = groupsRef.current
@@ -500,17 +517,17 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     return rows.slice(0, defaultSelectCount)
   }, [confirmedAdvancers, groups, defaultSelectCount])
 
-  const handleAdvancerConfirm = (picked) => {
+  const handleAdvancerConfirm = useCallback((picked) => {
     setConfirmedAdvancers(picked)
     setShowAdvancerModal(false)
     setShowStage2Config(true)
-  }
+  }, [])
 
-  const handleLaunchStage2 = () => {
+  const handleLaunchStage2 = useCallback(() => {
     if (confirmedAdvancers?.length && onAdvanceToStage2Ref.current) {
       onAdvanceToStage2Ref.current(finalAdvancerList, stage2Type)
     }
-  }
+  }, [confirmedAdvancers, finalAdvancerList, stage2Type])
 
   const posEmoji = ['🏆', '⭐', '🥉', '4️⃣', '5️⃣']
 
