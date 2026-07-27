@@ -13,8 +13,9 @@ const HOME_FRAME = { view: 'home', tournament: null, groups: null, stage2: null 
 function pickByePlayer(players) {
   if (!players || players.length === 0) return null
   return [...players].sort((a, b) =>
-    ((b.scoreDiff ?? b.sd ?? 0) - (a.scoreDiff ?? a.sd ?? 0)) ||
+    ((b.points    ?? 0)         - (a.points    ?? 0))         ||
     ((b.wins      ?? 0)         - (a.wins      ?? 0))         ||
+    ((b.scoreDiff ?? b.sd ?? 0) - (a.scoreDiff ?? a.sd ?? 0)) ||
     ((b.scoredFor ?? b.gf ?? 0) - (a.scoredFor ?? a.gf ?? 0)) ||
     (a.name ?? '').localeCompare(b.name ?? '')
   )[0]
@@ -57,25 +58,6 @@ function seedKnockoutPlayers(players) {
   seeded.push(...As, ...Bs, ...Cs, ...Ds)
 
   return seeded
-}
-
-function distributeByes(players) {
-  const nextPow2 = Math.pow(2, Math.ceil(Math.log2(players.length)));
-  if (players.length === nextPow2) return players;
-
-  const byesNeeded = nextPow2 - players.length;
-  const padded = [];
-  let pIdx = 0;
-
-  for (let i = 0; i < nextPow2 / 2; i++) {
-    padded.push(players[pIdx++] || null);
-    if (i < byesNeeded) {
-      padded.push(null);
-    } else {
-      padded.push(players[pIdx++] || null);
-    }
-  }
-  return padded;
 }
 
 export default function App() {
@@ -213,6 +195,7 @@ export default function App() {
   const handleAdvanceToStage2 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentTournament = tournamentRef.current
     const currentGroups     = groupsRef.current
+    
 
     // Rank 0 = A, Rank 1 = B, Rank 2 = C, Others = D
     const taggedAdvancers = advancers.map(p => {
@@ -225,8 +208,6 @@ export default function App() {
 
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(taggedAdvancers)
-      const balancedKnockout = distributeByes(seededKnockout)
-      let bracket = generateStage2Elim(balancedKnockout)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s2 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
@@ -336,9 +317,6 @@ export default function App() {
       else if (p.rank === 2) newTag = 'C'
       return { ...p, tag: newTag }
     })
-
-    const balancedKnockout = distributeByes(seededKnockout)
-    let bracket = generateStage2Elim(balancedKnockout)
 
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(taggedAdvancers)

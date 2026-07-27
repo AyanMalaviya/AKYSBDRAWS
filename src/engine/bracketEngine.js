@@ -18,19 +18,23 @@ const makeMatch = (p1, p2, round, bracket = 'winners') => ({
 
 const nextPow2 = n => Math.pow(2, Math.ceil(Math.log2(n)))
 
-function snakeSeed(players) {
+function padWithByes(players) {
   const size = nextPow2(players.length)
-  const seeded = [...players]
-  while (seeded.length < size) seeded.push(null)
+  if (players.length === size) return [...players]
 
-  const slots = new Array(size)
-  let lo = 0, hi = size - 1
-  for (let i = 0; i < seeded.length; i++) {
+  const byesNeeded = size - players.length
+  const padded = []
+  let pIdx = 0
 
-    if (i % 2 === 0) { slots[lo] = seeded[i]; lo++ }
-    else             { slots[hi] = seeded[i]; hi-- }
+  for (let i = 0; i < size / 2; i++) {
+    padded.push(players[pIdx++] || null)
+    if (i < byesNeeded) {
+      padded.push(null)
+    } else {
+      padded.push(players[pIdx++] || null)
+    }
   }
-  return slots
+  return padded
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,20 +53,29 @@ function autoAdvanceByesInRound(draftRounds, roundIdx) {
   })
 }
 
-/* --- SINGLE ELIMINATION --- */
 export function generateSingleElim(players) {
-  const size   = nextPow2(players.length)
-  const slots  = snakeSeed(players)
-
   const rounds = []
   let cur = []
-  for (let i = 0; i < size; i += 2) cur.push(makeMatch(slots[i], slots[i + 1], 1))
+
+  // Pair players exactly as they come without power of 2 padding
+  for (let i = 0; i < players.length; i += 2) {
+    cur.push(makeMatch(players[i], players[i + 1] ?? null, 1))
+  }
   rounds.push(cur)
 
+  // Build future rounds and flag structurally dead slots
   let rn = 2, prev = cur
   while (prev.length > 1) {
     const next = []
-    for (let i = 0; i < prev.length; i += 2) next.push(makeMatch(null, null, rn))
+    for (let i = 0; i < prev.length; i += 2) {
+      const match = makeMatch(null, null, rn)
+      
+      // If the previous round has no match to feed into the p2 slot, this branch is structurally dead
+      if (!prev[i + 1]) {
+        match.isStructurallyDead = true
+      }
+      next.push(match)
+    }
     rounds.push(next); prev = next; rn++
   }
 
@@ -76,17 +89,24 @@ export function generateSingleElim(players) {
 
 function _advanceSingleElimDraft(draft, roundIdx, matchIdx, winner, score1, score2) {
   if (winner === null) {
-    if (draft.rounds[roundIdx][matchIdx].isBye) return
+    // Allow structural byes to be cleared if a previous round is undone
+    if (draft.rounds[roundIdx][matchIdx].isBye && !draft.rounds[roundIdx][matchIdx].isStructurallyDead) return
+    
     draft.rounds[roundIdx][matchIdx].winner = null
     draft.rounds[roundIdx][matchIdx].score1 = null
     draft.rounds[roundIdx][matchIdx].score2 = null
     let cur = matchIdx
+    
     for (let r = roundIdx + 1; r < draft.rounds.length; r++) {
       const next = Math.floor(cur / 2)
       const slot = cur % 2 === 0 ? 'p1' : 'p2'
       const m = draft.rounds[r][next]
       if (!m) break
-      m[slot] = null; m.winner = null; m.score1 = null; m.score2 = null; cur = next
+      m[slot] = null; m.winner = null; m.score1 = null; m.score2 = null
+      
+      // Reset the state of the structural bye if the feeder match is undone
+      if (m.isStructurallyDead && m.isBye) m.isBye = false
+      cur = next
     }
     draft.champion = null
     return
@@ -95,9 +115,20 @@ function _advanceSingleElimDraft(draft, roundIdx, matchIdx, winner, score1, scor
   draft.rounds[roundIdx][matchIdx].winner = winner
   if (score1 != null) draft.rounds[roundIdx][matchIdx].score1 = score1
   if (score2 != null) draft.rounds[roundIdx][matchIdx].score2 = score2
+  
   const nextRound = draft.rounds[roundIdx + 1]
   if (nextRound) {
-    nextRound[Math.floor(matchIdx / 2)][matchIdx % 2 === 0 ? 'p1' : 'p2'] = winner
+    const nextMatchIdx = Math.floor(matchIdx / 2)
+    const slot = matchIdx % 2 === 0 ? 'p1' : 'p2'
+    const targetMatch = nextRound[nextMatchIdx]
+    
+    targetMatch[slot] = winner
+
+    // Automatically advance the player if their match is missing a second feeder branch
+    if (targetMatch.isStructurallyDead) {
+      targetMatch.isBye = true
+      _advanceSingleElimDraft(draft, roundIdx + 1, nextMatchIdx, winner, null, null)
+    }
   } else {
     draft.champion = winner
   }
@@ -119,16 +150,8 @@ export function advanceSingleElimWithScore(bracket, roundIdx, matchIdx, score1, 
 }
 
 export function generateStage2Elim(players) {
-
-  const isPow2 = (n) => n > 0 && (n & (n - 1)) === 0
-  let slots
-  if (isPow2(players.length)) {
-    slots = [...players]
-  } else {
-    const size = nextPow2(players.length)
-    slots = [...players]
-    while (slots.length < size) slots.push(null)
-  }
+  // Pass the raw players array directly instead of padWithByes(players)
+  const slots = players
 
   const rounds = []
   const cur    = []
@@ -217,9 +240,8 @@ export function advanceStage2ElimWithScore(bracket, roundIdx, matchIdx, score1, 
 
 /* --- DOUBLE ELIMINATION --- */
 export function generateDoubleElim(players) {
-  const size = nextPow2(players.length)
-  const seeded = [...players]
-  while (seeded.length < size) seeded.push(null)
+  const slots = padWithByes(players)
+  const size = slots.length
   const wRounds = []
   let wCur = []
   for (let i = 0; i < size; i += 2) wCur.push(makeMatch(seeded[i], seeded[i + 1], 1, 'winners'))

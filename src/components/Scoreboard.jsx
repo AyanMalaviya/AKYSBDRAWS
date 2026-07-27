@@ -13,9 +13,17 @@ export default function Scoreboard({ groups }) {
     const all = []
     groups.forEach(g => {
       g.standings.forEach(s => {
-        all.push({ ...s, groupName: g.name })
+        // Normalize aliases to ensure the scoreboard always catches bracket data
+        all.push({ 
+          ...s, 
+          groupName: g.name,
+          scoreDiff: s.scoreDiff ?? s.sd ?? 0,
+          scoredFor: s.scoredFor ?? s.gf ?? 0,
+          scoredAgainst: s.scoredAgainst ?? s.ga ?? 0
+        })
       })
     })
+    
     all.sort((a, b) =>
       (b.points    ?? 0) - (a.points    ?? 0) ||
       (b.wins      ?? 0) - (a.wins      ?? 0) ||
@@ -26,7 +34,12 @@ export default function Scoreboard({ groups }) {
     return all
   }, [groups])
 
-  const hasScores = rows.some(r => (r.scoredFor ?? 0) > 0 || (r.scoredAgainst ?? 0) > 0)
+  // Allow the column to render even if SD is negative or missing specific GF/GA data
+  const hasScores = rows.some(r => 
+    r.scoredFor !== 0 || 
+    r.scoredAgainst !== 0 || 
+    r.scoreDiff !== 0
+  )
   const totalMatches = groups.reduce((s, g) => s + g.matches.length, 0)
   const doneMatches  = groups.reduce((s, g) => s + g.matches.filter(m => m.winner).length, 0)
   const pct = totalMatches ? Math.round((doneMatches / totalMatches) * 100) : 0
