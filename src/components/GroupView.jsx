@@ -155,8 +155,9 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
       })
     })
     rows.sort((a, b) =>
+      (b.wins      ?? 0) - (a.wins      ?? 0) || // Wins first
+      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) || // SD second
       (b.points    ?? 0) - (a.points    ?? 0) ||
-      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) ||
       (b.scoredFor ?? 0) - (a.scoredFor ?? 0) ||
       (a.name ?? '').localeCompare(b.name ?? '')
     )
@@ -494,8 +495,9 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
       g.standings.forEach((s, rank) => rows.push({ ...s, groupId: g.id, groupName: g.name, rank }))
     })
     rows.sort((a, b) =>
-      (b.points ?? 0) - (a.points ?? 0) ||
-      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) ||
+      (b.wins      ?? 0) - (a.wins      ?? 0) || // Wins first
+      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) || // SD second
+      (b.points    ?? 0) - (a.points    ?? 0) ||
       (b.scoredFor ?? 0) - (a.scoredFor ?? 0) ||
       (a.name ?? '').localeCompare(b.name ?? '')
     )

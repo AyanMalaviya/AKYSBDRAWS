@@ -13,7 +13,6 @@ export default function Scoreboard({ groups }) {
     const all = []
     groups.forEach(g => {
       g.standings.forEach(s => {
-        // Normalize aliases to ensure the scoreboard always catches bracket data
         all.push({ 
           ...s, 
           groupName: g.name,
@@ -25,9 +24,9 @@ export default function Scoreboard({ groups }) {
     })
     
     all.sort((a, b) =>
+      (b.wins      ?? 0) - (a.wins      ?? 0) || // 1. Wins first
+      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) || // 2. SD second
       (b.points    ?? 0) - (a.points    ?? 0) ||
-      (b.wins      ?? 0) - (a.wins      ?? 0) ||
-      (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0) ||
       (b.scoredFor ?? 0) - (a.scoredFor ?? 0) ||
       (a.name ?? '').localeCompare(b.name ?? '')
     )

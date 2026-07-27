@@ -4,8 +4,8 @@ import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
-import BackupSync from './components/BackupSync.jsx'
 import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim } from './engine/bracketEngine.js'
+import BackupSync from './components/BackupSync.jsx'
 import { generateGroups, reassignTagsByStandings } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
 
@@ -14,9 +14,9 @@ const HOME_FRAME = { view: 'home', tournament: null, groups: null, stage2: null 
 function pickByePlayer(players) {
   if (!players || players.length === 0) return null
   return [...players].sort((a, b) =>
-    ((b.points    ?? 0)         - (a.points    ?? 0))         ||
     ((b.wins      ?? 0)         - (a.wins      ?? 0))         ||
     ((b.scoreDiff ?? b.sd ?? 0) - (a.scoreDiff ?? a.sd ?? 0)) ||
+    ((b.points    ?? 0)         - (a.points    ?? 0))         ||
     ((b.scoredFor ?? b.gf ?? 0) - (a.scoredFor ?? a.gf ?? 0)) ||
     (a.name ?? '').localeCompare(b.name ?? '')
   )[0]
@@ -396,7 +396,7 @@ export default function App() {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
 
-  // Callback for BackupSync to refresh history state after a merge
+    // Callback for BackupSync to refresh history state after a merge
   const handleHistoryChange = useCallback((merged) => {
     // useHistory keeps its own ref; we call syncHistory if exposed, otherwise
     // re-read from idb-keyval indirectly by forcing a page-level state update.
