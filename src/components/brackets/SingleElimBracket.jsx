@@ -12,6 +12,7 @@ const COL_GAP = 52
 const CARD_H  = 82
 const V_GAP   = 14
 
+// Dynamically label rounds based strictly on remaining matches
 function getRoundLabel(matchCount) {
   if (matchCount === 1) return 'Final'
   if (matchCount === 2) return 'Semi-Finals'
@@ -28,8 +29,8 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
   const bracketRef = useRef(bracket)
   bracketRef.current = bracket
 
-  // Store format preferences for SF and Final rounds
-  const [bestOf, setBestOf] = useState({ sf: 1, final: 1 })
+  // Read bestOf directly from the saved bracket (defaulting to 1 if not set yet)
+  const bestOf = bracket.bestOf || { sf: 1, final: 1 }
 
   const handleWin = useCallback((rIdx, mIdx, winner) => {
     if (bracketRef.current.type === 'stage2_elim') {
@@ -45,6 +46,15 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
     } else {
       onUpdate(advanceSingleElimWithScore(bracketRef.current, rIdx, mIdx, s1, s2))
     }
+  }, [onUpdate])
+
+  // Save partial score entries up to the main tournament bracket object
+  const handleSavePartial = useCallback((rIdx, mIdx, sets) => {
+    const b = bracketRef.current
+    const newRounds = b.rounds.map((r, ri) =>
+      ri === rIdx ? r.map((m, mi) => mi === mIdx ? { ...m, partialSets: sets } : m) : r
+    )
+    onUpdate({ ...b, rounds: newRounds })
   }, [onUpdate])
 
   useEffect(() => {
@@ -121,7 +131,6 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
           const matchCount = round.length
           const label = getRoundLabel(matchCount)
           
-          // Identify if current column is SF or Final based strictly on match counts
           const isSF = matchCount === 2
           const isFinal = matchCount === 1
           const currentBestOf = isSF ? bestOf.sf : isFinal ? bestOf.final : 1
@@ -139,11 +148,15 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
               <div className="bracket-row-label" style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontWeight: 800 }}>{label}</span>
                 
-                {/* Render the format dropdown only on SF and Final columns */}
                 {(isSF || isFinal) && (
                   <select
                     value={isSF ? bestOf.sf : bestOf.final}
-                    onChange={(e) => setBestOf(p => ({ ...p, [isSF ? 'sf' : 'final']: Number(e.target.value) }))}
+                    onChange={(e) => {
+                      onUpdate({
+                        ...bracketRef.current,
+                        bestOf: { ...bestOf, [isSF ? 'sf' : 'final']: Number(e.target.value) }
+                      })
+                    }}
                     style={{
                       fontSize: 11, padding: '3px 8px',
                       background: 'rgba(255,255,255,0.06)', color: 'var(--muted)',
@@ -165,6 +178,7 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
                   bestOf={currentBestOf}
                   onWin={w => handleWin(rIdx, mIdx, w)}
                   onScore={(s1, s2) => handleScore(rIdx, mIdx, s1, s2)}
+                  onSavePartial={(sets) => handleSavePartial(rIdx, mIdx, sets)}
                 />
               ))}
             </div>

@@ -68,7 +68,7 @@ export default function App() {
   const [stage2, setStage2]         = useState(null)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
 
-  const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry, syncHistory } = useHistory()
+  const { history, isLoaded, upsertHistory, deleteEntry, deleteAll, archiveEntry, syncHistory } = useHistory()
 
   const stackRef = useRef([HOME_FRAME])
   const isPushingRef = useRef(false)
@@ -126,6 +126,48 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
+  // --- NEW: SESSION RECOVERY & TRACKING ---
+  const hasRestoredRef = useRef(false)
+  
+  // 1. Recover active screen if page is refreshed or tab is reopened
+  useEffect(() => {
+    if (!isLoaded || hasRestoredRef.current) return
+    hasRestoredRef.current = true
+
+    const sessionStr = localStorage.getItem('akysb_active_session')
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr)
+        const entryState = history.find(e => e.id === session.tournamentId)
+        
+        if (entryState) {
+          stackRef.current = [HOME_FRAME]
+          const targetFrame = {
+            view: session.view,
+            tournament: entryState,
+            groups: entryState.groups || null,
+            stage2: entryState.stage2 || null
+          }
+          stackRef.current.push(targetFrame)
+          window.history.replaceState({ depth: stackRef.current.length }, '')
+          applyFrame(targetFrame)
+        }
+      } catch (e) {}
+    }
+  }, [isLoaded, history, applyFrame])
+
+  // 2. Track the active screen in memory on every navigation
+  useEffect(() => {
+    if (view === 'home' || view === 'dashboard') {
+      localStorage.removeItem('akysb_active_session')
+    } else if (tournament?.id) {
+      localStorage.setItem('akysb_active_session', JSON.stringify({
+        view: view,
+        tournamentId: tournament.id
+      }))
+    }
+  }, [view, tournament?.id])
+
   const handleInstallClick = async () => {
     if (!deferredPrompt) return
     deferredPrompt.prompt()
@@ -137,6 +179,13 @@ export default function App() {
     stackRef.current = [HOME_FRAME]
     window.history.replaceState({ depth: 1 }, '')
     applyFrame(HOME_FRAME)
+  }, [applyFrame])
+
+  const handleLogoClick = useCallback(() => {
+    const rootFrame = { view: 'dashboard', tournament: null, groups: null, stage2: null }
+    stackRef.current = [rootFrame]
+    window.history.replaceState({ depth: 1 }, '')
+    applyFrame(rootFrame)
   }, [applyFrame])
 
   const handleStart = ({ format, players }) => {
@@ -473,7 +522,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topnav">
-        <div className="topnav-brand" onClick={handleHome}>
+        <div className="topnav-brand" onClick={handleLogoClick}>
           <div>
             <div className="brand-name">Tournament <span className="brand-accent">Draws</span></div>
             <div className="brand-sub">Draw Manager</div>
@@ -487,7 +536,7 @@ export default function App() {
           )}
           <button
             className={`nav-pill${view !== 'dashboard' ? ' active' : ''}`}
-            onClick={handleHome}
+            onClick={handleLogoClick}
           >
             <span className="hide-mob">New </span>Draw
           </button>
@@ -529,7 +578,7 @@ export default function App() {
           <GroupView
             groups={renderGroups}
             onGroupsUpdate={handleGroupsUpdate}
-            onBack={handleHome}
+            onBack={handleLogoClick}
             onAdvanceToStage2={handleAdvanceToStage2}
             hasStage2={!!(tournament?.stage2)}
             onGoToStage2={() => navigate('stage2', { 

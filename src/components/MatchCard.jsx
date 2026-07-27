@@ -2,10 +2,14 @@ import React, { memo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TAG_META } from '../engine/groupEngine.js'
 
+// Helper to pull the same tag colors used in GroupView
 const tagColor = (tag) => TAG_META[tag || 'C']?.color || TAG_META['C'].color
 
-function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
+// ── Inline Score Entry Modal ──────────────────────────────────────────
+function ScoreModal({ match, bestOf = 1, initialSets, onSaveSets, onConfirm, onClose }) {
+  // Initialize state using previously saved partial sets if they match the current format
   const [sets, setSets] = useState(() => {
+    if (initialSets && initialSets.length === bestOf) return initialSets
     if (bestOf === 1 && match.score1 != null) {
       return [{ s1: match.score1, s2: match.score2 }]
     }
@@ -16,11 +20,18 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
     setSets(prev => prev.map((s, i) => i === index ? { ...s, [field]: val } : s))
   }
 
+  // Intercept the close action to save partial data before unmounting
+  const handleClose = () => {
+    onSaveSets(sets)
+    onClose()
+  }
+
   const targetWins = Math.ceil(bestOf / 2)
   let currentP1Wins = 0
   let currentP2Wins = 0
   let validSetsCount = 0
 
+  // Dynamically evaluate sets to see who is winning and if future sets are needed
   const setStatuses = sets.map((set) => {
     const v1 = set.s1 === '' ? null : Number(set.s1)
     const v2 = set.s2 === '' ? null : Number(set.s2)
@@ -59,7 +70,7 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
     }
   }
 
-  const handleKey = e => { if (e.key === 'Enter' && ready) onConfirm(finalS1, finalS2) }
+  const handleKey = e => { if (e.key === 'Enter' && ready) onConfirm(finalS1, finalS2, sets) }
 
   return (
     <div
@@ -68,7 +79,7 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 2000, padding: 16,
       }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onClick={e => { if (e.target === e.currentTarget) handleClose() }}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
@@ -84,7 +95,7 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--white-soft)' }}>
             📊 Enter Score {bestOf > 1 ? `(Best of ${bestOf})` : ''}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 4 }}>✕</button>
+          <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 4 }}>✕</button>
         </div>
 
         {bestOf === 1 ? (
@@ -180,7 +191,7 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               flex: 1, padding: '10px 0', borderRadius: 10, cursor: 'pointer',
               background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
@@ -189,7 +200,7 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
           >Cancel</button>
           <button
             disabled={!ready}
-            onClick={() => ready && onConfirm(finalS1, finalS2)}
+            onClick={() => ready && onConfirm(finalS1, finalS2, sets)}
             style={{
               flex: 2, padding: '10px 0', borderRadius: 10,
               cursor: ready ? 'pointer' : 'not-allowed',
@@ -207,8 +218,9 @@ function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
 }
 
 // ── Match Card ────────────────────────────────────────────────────────
-const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, showDraw = false }) => {
+const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, onSavePartial, showDraw = false }) => {
   const [scoreModal, setScoreModal] = useState(false)
+  
   if (!match) return null
 
   const done   = !!match.winner
@@ -218,12 +230,15 @@ const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, showDraw = false
   const canAct = p1 && p2 && !isBye
 
   const hasScore = match.score1 != null && match.score2 != null
+  const partialSets = match.partialSets || null
 
-  const handleScoreConfirm = (s1, s2) => {
+  const handleScoreConfirm = (s1, s2, finalSets) => {
+    onSavePartial?.(finalSets)
     setScoreModal(false)
     onScore?.(s1, s2)
   }
 
+  // Prevents text overlapping with the absolute positioned buttons
   const rightPadding = isBye ? 40 : 54; 
 
   const renderPlayer = (player, score, isTop) => {
@@ -281,6 +296,8 @@ const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, showDraw = false
           <ScoreModal
             match={match}
             bestOf={bestOf}
+            initialSets={partialSets}
+            onSaveSets={(sets) => onSavePartial?.(sets)}
             onClose={() => setScoreModal(false)}
             onConfirm={handleScoreConfirm}
           />
@@ -290,7 +307,7 @@ const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, showDraw = false
       <div
         className="match-card"
         style={{
-          height: 82,
+          height: 82, // Hardcoded to 82px to maintain SVG line alignments
           background: 'var(--surface2, rgba(20,20,30,0.8))',
           border: '1px solid var(--border, rgba(255,255,255,0.1))',
           borderRadius: 8,

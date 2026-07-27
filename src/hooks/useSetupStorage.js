@@ -1,7 +1,4 @@
-// Persist Setup form state in localStorage so refreshes / back-navigation
-// never lose player names, tags, or settings.
-
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 const KEY = 'akysb_setup_v1'
 
@@ -22,12 +19,9 @@ export function useSetupStorage(defaults) {
     return saved ? { ...defaults, ...saved } : defaults
   })
 
-  // Debounce saves — only write after 300ms of no changes
-  const timer = useRef(null)
+  // INSTANT SAVE: Directly write to local storage whenever state changes
   useEffect(() => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => save(state), 300)
-    return () => clearTimeout(timer.current)
+    save(state)
   }, [state])
 
   const set = (key, val) =>
