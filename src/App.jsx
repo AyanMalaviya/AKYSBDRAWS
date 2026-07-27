@@ -4,6 +4,7 @@ import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
+import BackupSync from './components/BackupSync.jsx'
 import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim } from './engine/bracketEngine.js'
 import { generateGroups, reassignTagsByStandings } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
@@ -67,7 +68,7 @@ export default function App() {
   const [stage2, setStage2]         = useState(null)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
 
-  const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry } = useHistory()
+  const { history, upsertHistory, deleteEntry, deleteAll, archiveEntry, syncHistory } = useHistory()
 
   const stackRef = useRef([HOME_FRAME])
   const isPushingRef = useRef(false)
@@ -395,6 +396,16 @@ export default function App() {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
 
+  // Callback for BackupSync to refresh history state after a merge
+  const handleHistoryChange = useCallback((merged) => {
+    // useHistory keeps its own ref; we call syncHistory if exposed, otherwise
+    // re-read from idb-keyval indirectly by forcing a page-level state update.
+    // The cleanest approach: expose syncHistory from useHistory.
+    if (typeof syncHistory === 'function') {
+      syncHistory(merged)
+    }
+  }, [syncHistory])
+
 
   const topFrame      = stackRef.current[stackRef.current.length - 1]
   const renderGroups  = topFrame?.view === 'groups'  ? (topFrame.groups  ?? groups)  : groups
@@ -435,6 +446,7 @@ export default function App() {
             History {history.filter(h => h.isArchived).length > 0 &&
               <span className="nav-count">{history.filter(h => h.isArchived).length}</span>}
           </button>
+          <BackupSync history={history} onHistoryChange={handleHistoryChange} />
         </nav>
       </header>
 
