@@ -21,7 +21,7 @@ export function useHistory() {
     }).catch(() => setIsLoaded(true))
   }, [])
 
-  // Keep ref in sync with state
+  // Keep ref in sync with state — also exported so BackupSync can push merged data
   const syncHistory = useCallback((next) => {
     historyRef.current = next
     setHistory(next)
@@ -81,5 +81,5 @@ export function useHistory() {
 
   const restoreEntry = useCallback((entry) => entry, [])
 
-  return { history, isLoaded, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry }
+  return { history, isLoaded, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry, syncHistory }
 }
