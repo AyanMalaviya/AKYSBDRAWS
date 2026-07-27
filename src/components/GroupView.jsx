@@ -118,7 +118,7 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
   )
 }
 
-function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, slot }) {
+function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, slot, isLocked }) {
   const remaining = tiedPlayers.filter(p => !eliminatedIds.includes(p.id))
   const resolved  = remaining.length === 1
   return (
@@ -131,7 +131,7 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
         </div>
       </div>
       {!resolved && (
-        <div className="tb-players">
+        <div className="tb-players" style={isLocked ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
           {remaining.map(p => (
             <div key={p.id} className="tb-player-row">
               <span className="tb-player-name" style={{ color: tagColor(p.tag), fontWeight: 700 }}>{p.name}</span>
@@ -235,7 +235,7 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
   )
 }
 
-function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, onEditAction, eliminatedIds, onEliminate, advancersPerGroup }) {
+function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, onEditAction, eliminatedIds, onEliminate, advancersPerGroup, isLocked }) {
   const [showStandings, setShowStandings] = useState(false)
   const [scoreModal, setScoreModal]       = useState(null)
 
@@ -340,9 +340,10 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
               groupName={group.name}
               tiedPlayers={tied.map(p => ({ ...p, points: group.standings.find(s => s.id === p.id)?.points ?? 0, wins: group.standings.find(s => s.id === p.id)?.wins ?? 0, scoreDiff: group.standings.find(s => s.id === p.id)?.scoreDiff ?? 0 }))}
               eliminatedIds={eliminatedIds} onEliminate={onEliminate} slot={advancers.length + 1}
+              isLocked={isLocked}
             />
           )}
-          <div className="gc-matches">
+          <div className="gc-matches" style={isLocked ? { pointerEvents: 'none', opacity: 0.6 } : {}}>
             {group.matches.map(m => (
               <MatchRow key={m.id} match={m} onResult={w => onUpdate(group.id, m.id, w)} onScoreEntry={match => setScoreModal(match)} />
             ))}
@@ -525,7 +526,10 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ padding: '8px 16px' }}>⬅ Back to Setup</button>
-              <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
+              
+              {!hasStage2 && (
+                <button onClick={handleStartEdit} className="btn btn-sm" style={{ padding: '8px 16px', background: 'rgba(139,92,246,0.1)', color: 'var(--purple-light)', border: '1px solid rgba(139,92,246,0.4)' }}>✏️ Edit Rosters &amp; Groups</button>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
@@ -560,6 +564,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             eliminatedIds={group.eliminatedIds || []}
             onEliminate={(playerId) => handleEliminate(group.id, playerId)}
             advancersPerGroup={safeAdvancers}
+            isLocked={hasStage2} // Pass the lock state down
           />
         ))}
       </div>

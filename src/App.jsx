@@ -156,8 +156,17 @@ export default function App() {
     const currentTournament = tournamentRef.current
     const currentGroups     = groupsRef.current
 
+    // --- NEW: Reassign tags based on group finish ---
+    // rank 0 = 1st place (A), rank 1 = 2nd place (B), others = C
+    const taggedAdvancers = advancers.map(p => {
+      let newTag = 'C';
+      if (p.rank === 0) newTag = 'A';
+      else if (p.rank === 1) newTag = 'B';
+      return { ...p, tag: newTag };
+    });
+
     if (stage2Type === 'groups') {
-      const seededAdvancers = reassignTagsByStandings(advancers)
+      const seededAdvancers = reassignTagsByStandings(taggedAdvancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s2 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
@@ -165,7 +174,8 @@ export default function App() {
         const u = { ...prev, stage2: s2, groups: newGroups }
         upsertHistory(u)
         stackRef.current.forEach((f, i) => {
-          if (f.view === 'groups') stackRef.current[i] = { ...f, groups: newGroups, tournament: u }
+          stackRef.current[i] = { ...f, tournament: u }
+          if (f.view === 'groups') stackRef.current[i].groups = newGroups
         })
         return u
       })
@@ -174,13 +184,13 @@ export default function App() {
     }
 
     const prevIds = currentTournament?.stage2?.players?.map(p => p.id).join(',') || ''
-    const newIds  = advancers.map(p => p.id).join(',')
+    const newIds  = taggedAdvancers.map(p => p.id).join(',')
     if (currentTournament?.stage2 && currentTournament.stage2.type !== 'groups' && prevIds === newIds) {
       navigate('stage2', { tournament: currentTournament, groups: currentGroups, stage2: currentTournament.stage2 })
       return
     }
 
-    let bracket = generateStage2Elim(advancers)
+    let bracket = generateStage2Elim(taggedAdvancers)
 
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
@@ -189,12 +199,12 @@ export default function App() {
       }
     }
 
-    const s2 = { type: 'knockout', players: advancers, bracket }
+    const s2 = { type: 'knockout', players: taggedAdvancers, bracket }
     setTournament(prev => {
       const u = { ...prev, stage2: s2 }
       upsertHistory(u)
       stackRef.current.forEach((f, i) => {
-        if (f.view === 'groups') stackRef.current[i] = { ...f, tournament: u }
+        stackRef.current[i] = { ...f, tournament: u }
       })
       return u
     })
@@ -255,34 +265,38 @@ export default function App() {
 
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentGroups = groupsRef.current
-    
+
+    // --- NEW: Reassign tags based on group finish ---
+    const taggedAdvancers = advancers.map(p => {
+      let newTag = 'C';
+      if (p.rank === 0) newTag = 'A';
+      else if (p.rank === 1) newTag = 'B';
+      return { ...p, tag: newTag };
+    });
+
     if (stage2Type === 'groups') {
-      const seededAdvancers = reassignTagsByStandings(advancers)
+      const seededAdvancers = reassignTagsByStandings(taggedAdvancers)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s3 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
-      
       setTournament(prev => {
         const u = { ...prev, stage2: s3, groups: newGroups }
         upsertHistory(u)
-        
-        // FIX: Sync tournament state across the stack
         stackRef.current.forEach((f, i) => {
           stackRef.current[i] = { ...f, tournament: u }
         })
-        
         return u
       })
       navigate('stage2', { groups: newGroups, stage2: s3 })
       return
     }
-    
-    let bracket = generateStage2Elim(advancers)
+
+    let bracket = generateStage2Elim(taggedAdvancers)
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
       if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
     }
-    const s3 = { type: 'knockout', players: advancers, bracket }
+    const s3 = { type: 'knockout', players: taggedAdvancers, bracket }
     
     setTournament(prev => {
       const u = { ...prev, stage2: s3 }
@@ -290,7 +304,6 @@ export default function App() {
       stackRef.current.forEach((f, i) => {
         stackRef.current[i] = { ...f, tournament: u }
       })
-      
       return u
     })
     navigate('stage2', { groups: currentGroups, stage2: s3 })
