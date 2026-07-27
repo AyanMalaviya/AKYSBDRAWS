@@ -372,6 +372,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const [stage2Type, setStage2Type]                 = useState('knockout')
   const [confirmedAdvancers, setConfirmedAdvancers] = useState(null)
   const [showStage2Config, setShowStage2Config]     = useState(false)
+  const [showConfirmModal, setShowConfirmModal]     = useState(false)
 
   const onGroupsUpdateRef    = useRef(onGroupsUpdate)
   const onAdvanceToStage2Ref = useRef(onAdvanceToStage2)
@@ -618,7 +619,7 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, opacity: allTiesResolved ? 1 : 0.4, cursor: allTiesResolved ? 'pointer' : 'not-allowed' }}
                   disabled={!allTiesResolved}
-                  onClick={handleLaunchStage2}
+                  onClick={() => setShowConfirmModal(true)}
                 >
                   🚀 Launch Stage 2
                 </button>
@@ -662,6 +663,43 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
             onConfirm={handleAdvancerConfirm}
             onClose={() => setShowAdvancerModal(false)}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="modal-overlay" style={{ zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              style={{ background: 'rgba(16,14,31,0.98)', padding: 24, borderRadius: 16, border: '1px solid rgba(224, 91, 78, 0.4)', maxWidth: 400, textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}
+            >
+              <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+              <h3 style={{ color: '#e05b4e', marginTop: 0, fontSize: 18, fontWeight: 800 }}>Lock Stage 1?</h3>
+              <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5 }}>
+                Are you sure you want to generate Stage 2? Doing so will <strong>permanently lock</strong> Stage 1. You will no longer be able to edit scores, change groups, or resolve ties.
+              </p>
+              <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+                <button 
+                  className="btn btn-ghost btn-sm" 
+                  style={{ flex: 1 }} 
+                  onClick={() => setShowConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-sm" 
+                  style={{ flex: 1, background: 'rgba(224, 91, 78, 0.15)', color: '#e05b4e', border: '1px solid rgba(224, 91, 78, 0.5)', fontWeight: 800 }} 
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    handleLaunchStage2();
+                  }}
+                >
+                  Lock & Launch
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

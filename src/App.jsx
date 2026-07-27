@@ -20,6 +20,64 @@ function pickByePlayer(players) {
   )[0]
 }
 
+function seedKnockoutPlayers(players) {
+  const As = players.filter(p => p.tag === 'A')
+  const Bs = players.filter(p => p.tag === 'B')
+  const Cs = players.filter(p => p.tag === 'C')
+  const Ds = players.filter(p => !['A', 'B', 'C'].includes(p.tag))
+
+  const seeded = []
+
+  while (As.length > 0 && Cs.length > 0) {
+    seeded.push(As.shift(), Cs.shift())
+  }
+
+  while (As.length > 0 && Bs.length > 0) {
+    seeded.push(As.shift(), Bs.shift())
+  }
+
+  while (Cs.length > 0 && Bs.length > 0) {
+    seeded.push(Cs.shift(), Bs.shift())
+  }
+
+  while (Bs.length >= 2) {
+    seeded.push(Bs.shift(), Bs.shift())
+  }
+
+  while (As.length > 0 && Ds.length > 0) {
+    seeded.push(As.shift(), Ds.shift())
+  }
+  while (Bs.length > 0 && Ds.length > 0) {
+    seeded.push(Bs.shift(), Ds.shift())
+  }
+  while (Cs.length > 0 && Ds.length > 0) {
+    seeded.push(Cs.shift(), Ds.shift())
+  }
+
+  seeded.push(...As, ...Bs, ...Cs, ...Ds)
+
+  return seeded
+}
+
+function distributeByes(players) {
+  const nextPow2 = Math.pow(2, Math.ceil(Math.log2(players.length)));
+  if (players.length === nextPow2) return players;
+
+  const byesNeeded = nextPow2 - players.length;
+  const padded = [];
+  let pIdx = 0;
+
+  for (let i = 0; i < nextPow2 / 2; i++) {
+    padded.push(players[pIdx++] || null);
+    if (i < byesNeeded) {
+      padded.push(null);
+    } else {
+      padded.push(players[pIdx++] || null);
+    }
+  }
+  return padded;
+}
+
 export default function App() {
   const [view, setView]             = useState('home')
   const [tournament, setTournament] = useState(null)
@@ -156,17 +214,19 @@ export default function App() {
     const currentTournament = tournamentRef.current
     const currentGroups     = groupsRef.current
 
-    // --- NEW: Reassign tags based on group finish ---
-    // rank 0 = 1st place (A), rank 1 = 2nd place (B), others = C
+    // Rank 0 = A, Rank 1 = B, Rank 2 = C, Others = D
     const taggedAdvancers = advancers.map(p => {
-      let newTag = 'C';
-      if (p.rank === 0) newTag = 'A';
-      else if (p.rank === 1) newTag = 'B';
-      return { ...p, tag: newTag };
-    });
+      let newTag = 'D'
+      if (p.rank === 0) newTag = 'A'
+      else if (p.rank === 1) newTag = 'B'
+      else if (p.rank === 2) newTag = 'C'
+      return { ...p, tag: newTag }
+    })
 
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(taggedAdvancers)
+      const balancedKnockout = distributeByes(seededKnockout)
+      let bracket = generateStage2Elim(balancedKnockout)
       const groupSize = Math.max(3, Math.round(seededAdvancers.length / Math.max(2, Math.round(seededAdvancers.length / 4))))
       const newGroups = generateGroups(seededAdvancers, groupSize)
       const s2 = { type: 'groups', players: seededAdvancers, groups: newGroups, groupSize }
@@ -190,7 +250,9 @@ export default function App() {
       return
     }
 
-    let bracket = generateStage2Elim(taggedAdvancers)
+    // Pass through custom seeding to force A vs C and B vs B
+    const seededKnockout = seedKnockoutPlayers(taggedAdvancers)
+    let bracket = generateStage2Elim(seededKnockout)
 
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
@@ -199,7 +261,7 @@ export default function App() {
       }
     }
 
-    const s2 = { type: 'knockout', players: taggedAdvancers, bracket }
+    const s2 = { type: 'knockout', players: seededKnockout, bracket }
     setTournament(prev => {
       const u = { ...prev, stage2: s2 }
       upsertHistory(u)
@@ -266,13 +328,17 @@ export default function App() {
   const handleAdvanceToStage3 = useCallback((advancers, stage2Type = 'knockout') => {
     const currentGroups = groupsRef.current
 
-    // --- NEW: Reassign tags based on group finish ---
+    // Rank 0 = A, Rank 1 = B, Rank 2 = C, Others = D
     const taggedAdvancers = advancers.map(p => {
-      let newTag = 'C';
-      if (p.rank === 0) newTag = 'A';
-      else if (p.rank === 1) newTag = 'B';
-      return { ...p, tag: newTag };
-    });
+      let newTag = 'D'
+      if (p.rank === 0) newTag = 'A'
+      else if (p.rank === 1) newTag = 'B'
+      else if (p.rank === 2) newTag = 'C'
+      return { ...p, tag: newTag }
+    })
+
+    const balancedKnockout = distributeByes(seededKnockout)
+    let bracket = generateStage2Elim(balancedKnockout)
 
     if (stage2Type === 'groups') {
       const seededAdvancers = reassignTagsByStandings(taggedAdvancers)
@@ -291,12 +357,15 @@ export default function App() {
       return
     }
 
-    let bracket = generateStage2Elim(taggedAdvancers)
+    // Pass through custom seeding to force A vs C and B vs B
+    const seededKnockout = seedKnockoutPlayers(taggedAdvancers)
+    let bracket = generateStage2Elim(seededKnockout)
+    
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
       if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
     }
-    const s3 = { type: 'knockout', players: taggedAdvancers, bracket }
+    const s3 = { type: 'knockout', players: seededKnockout, bracket }
     
     setTournament(prev => {
       const u = { ...prev, stage2: s3 }
