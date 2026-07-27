@@ -7,17 +7,29 @@ import {
   advanceStage2ElimWithScore,
 } from '../../engine/bracketEngine.js'
 
-const ROUND_LABELS = ['R64','R32','R16','QF','SF','Final']
 const COL_W   = 200
 const COL_GAP = 52
 const CARD_H  = 82
 const V_GAP   = 14
+
+function getRoundLabel(matchCount) {
+  if (matchCount === 1) return 'Final'
+  if (matchCount === 2) return 'Semi-Finals'
+  if (matchCount > 2 && matchCount <= 4) return 'Quarter-Finals'
+  if (matchCount > 4 && matchCount <= 8) return 'Round of 16'
+  if (matchCount > 8 && matchCount <= 16) return 'Round of 32'
+  if (matchCount > 16 && matchCount <= 32) return 'Round of 64'
+  return `Round of ${matchCount * 2}`
+}
 
 export default function SingleElimBracket({ bracket, onUpdate }) {
   const containerRef = useRef(null)
   const [lines, setLines] = useState([])
   const bracketRef = useRef(bracket)
   bracketRef.current = bracket
+
+  // Store format preferences for SF and Final rounds
+  const [bestOf, setBestOf] = useState({ sf: 1, final: 1 })
 
   const handleWin = useCallback((rIdx, mIdx, winner) => {
     if (bracketRef.current.type === 'stage2_elim') {
@@ -79,8 +91,6 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
     setLines(newLines)
   }, [bracket])
 
-  const total = bracket.rounds.length
-
   return (
     <div className="bracket-scroll">
       <div
@@ -108,7 +118,14 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
         </svg>
 
         {bracket.rounds.map((round, rIdx) => {
-          const labelIdx = Math.max(0, ROUND_LABELS.length - (total - rIdx))
+          const matchCount = round.length
+          const label = getRoundLabel(matchCount)
+          
+          // Identify if current column is SF or Final based strictly on match counts
+          const isSF = matchCount === 2
+          const isFinal = matchCount === 1
+          const currentBestOf = isSF ? bestOf.sf : isFinal ? bestOf.final : 1
+
           return (
             <div
               key={rIdx}
@@ -119,13 +136,33 @@ export default function SingleElimBracket({ bracket, onUpdate }) {
                 paddingTop: bracket.type === 'stage2_elim' ? 0 : (rIdx === 0 ? 0 : (Math.pow(2, rIdx) - 1) * (CARD_H + V_GAP) / 2),
               }}
             >
-              <div className="bracket-row-label" style={{ marginBottom: 8 }}>
-                {ROUND_LABELS[labelIdx]}
+              <div className="bracket-row-label" style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontWeight: 800 }}>{label}</span>
+                
+                {/* Render the format dropdown only on SF and Final columns */}
+                {(isSF || isFinal) && (
+                  <select
+                    value={isSF ? bestOf.sf : bestOf.final}
+                    onChange={(e) => setBestOf(p => ({ ...p, [isSF ? 'sf' : 'final']: Number(e.target.value) }))}
+                    style={{
+                      fontSize: 11, padding: '3px 8px',
+                      background: 'rgba(255,255,255,0.06)', color: 'var(--muted)',
+                      border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
+                      outline: 'none', cursor: 'pointer', textAlign: 'center'
+                    }}
+                  >
+                    <option value={1}>Best of 1</option>
+                    <option value={3}>Best of 3</option>
+                    <option value={5}>Best of 5</option>
+                  </select>
+                )}
               </div>
+              
               {round.map((match, mIdx) => (
                 <MatchCard
                   key={match.id}
                   match={match}
+                  bestOf={currentBestOf}
                   onWin={w => handleWin(rIdx, mIdx, w)}
                   onScore={(s1, s2) => handleScore(rIdx, mIdx, s1, s2)}
                 />

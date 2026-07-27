@@ -2,25 +2,64 @@ import React, { memo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TAG_META } from '../engine/groupEngine.js'
 
-// Helper to pull the same tag colors used in GroupView
 const tagColor = (tag) => TAG_META[tag || 'C']?.color || TAG_META['C'].color
 
-// ── Inline Score Entry Modal ──────────────────────────────────────────
-function ScoreModal({ match, onConfirm, onClose }) {
-  const [s1, setS1] = useState(match.score1 ?? '')
-  const [s2, setS2] = useState(match.score2 ?? '')
-  const v1 = s1 === '' ? null : Number(s1)
-  const v2 = s2 === '' ? null : Number(s2)
-  const ready = v1 !== null && v2 !== null && !isNaN(v1) && !isNaN(v2) && v1 >= 0 && v2 >= 0
+function ScoreModal({ match, bestOf = 1, onConfirm, onClose }) {
+  const [sets, setSets] = useState(() => {
+    if (bestOf === 1 && match.score1 != null) {
+      return [{ s1: match.score1, s2: match.score2 }]
+    }
+    return Array.from({ length: bestOf }, () => ({ s1: '', s2: '' }))
+  })
 
-  let preview = null
-  if (ready) {
-    if (v1 > v2)      preview = { label: `${match.p1.name} wins`, color: 'var(--green)' }
-    else if (v2 > v1) preview = { label: `${match.p2.name} wins`, color: 'var(--green)' }
-    else              preview = { label: 'Draw', color: 'var(--gold-light)' }
+  const updateSet = (index, field, val) => {
+    setSets(prev => prev.map((s, i) => i === index ? { ...s, [field]: val } : s))
   }
 
-  const handleKey = e => { if (e.key === 'Enter' && ready) onConfirm(v1, v2) }
+  const targetWins = Math.ceil(bestOf / 2)
+  let currentP1Wins = 0
+  let currentP2Wins = 0
+  let validSetsCount = 0
+
+  const setStatuses = sets.map((set) => {
+    const v1 = set.s1 === '' ? null : Number(set.s1)
+    const v2 = set.s2 === '' ? null : Number(set.s2)
+    const isValid = v1 !== null && v2 !== null && !isNaN(v1) && !isNaN(v2) && v1 >= 0 && v2 >= 0
+    const isNeeded = currentP1Wins < targetWins && currentP2Wins < targetWins
+
+    if (isValid && isNeeded) {
+      validSetsCount++
+      if (v1 > v2) currentP1Wins++
+      else if (v2 > v1) currentP2Wins++
+    }
+    return { isValid, isNeeded, v1, v2 }
+  })
+
+  let ready = false
+  let finalS1 = null
+  let finalS2 = null
+  let preview = null
+
+  if (bestOf === 1) {
+    ready = validSetsCount === 1
+    if (ready) {
+      finalS1 = setStatuses[0].v1
+      finalS2 = setStatuses[0].v2
+      if (finalS1 > finalS2) preview = { label: `${match.p1.name} wins`, color: 'var(--green)' }
+      else if (finalS2 > finalS1) preview = { label: `${match.p2.name} wins`, color: 'var(--green)' }
+      else preview = { label: 'Draw', color: 'var(--gold-light)' }
+    }
+  } else {
+    ready = currentP1Wins === targetWins || currentP2Wins === targetWins
+    if (ready) {
+      finalS1 = currentP1Wins
+      finalS2 = currentP2Wins
+      if (finalS1 > finalS2) preview = { label: `${match.p1.name} wins series ${finalS1}-${finalS2}`, color: 'var(--green)' }
+      else preview = { label: `${match.p2.name} wins series ${finalS2}-${finalS1}`, color: 'var(--green)' }
+    }
+  }
+
+  const handleKey = e => { if (e.key === 'Enter' && ready) onConfirm(finalS1, finalS2) }
 
   return (
     <div
@@ -37,54 +76,97 @@ function ScoreModal({ match, onConfirm, onClose }) {
         exit={{ opacity: 0, scale: 0.92, y: 20 }}
         style={{
           background: 'rgba(16,14,31,0.98)', border: '1px solid rgba(0,212,255,0.25)',
-          borderRadius: 18, padding: 24, width: '100%', maxWidth: 340,
+          borderRadius: 18, padding: 24, width: '100%', maxWidth: 360,
           boxShadow: '0 0 40px rgba(0,212,255,0.12), 0 24px 48px rgba(0,0,0,0.7)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--white-soft)' }}>📊 Enter Score</div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--white-soft)' }}>
+            📊 Enter Score {bestOf > 1 ? `(Best of ${bestOf})` : ''}
+          </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: 4 }}>✕</button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p1.tag), marginBottom: 8,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {match.p1.name}
+        {bestOf === 1 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p1.tag), marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {match.p1.name}
+              </div>
+              <input
+                type="number" min={0} value={sets[0].s1} autoFocus
+                onChange={e => updateSet(0, 's1', e.target.value)} onKeyDown={handleKey}
+                placeholder="0"
+                style={{
+                  width: '100%', padding: '12px 8px', textAlign: 'center', fontSize: 28, fontWeight: 800,
+                  background: 'var(--surface3, rgba(255,255,255,0.06))', border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10, color: 'var(--white-soft)', outline: 'none',
+                }}
+              />
             </div>
-            <input
-              type="number" min={0} value={s1} autoFocus
-              onChange={e => setS1(e.target.value)} onKeyDown={handleKey}
-              placeholder="0"
-              style={{
-                width: '100%', padding: '12px 8px', textAlign: 'center',
-                fontSize: 28, fontWeight: 800,
-                background: 'var(--surface3, rgba(255,255,255,0.06))',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 10, color: 'var(--white-soft)', outline: 'none',
-              }}
-            />
-          </div>
-          <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: 2 }}>VS</div>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p2.tag), marginBottom: 8,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {match.p2.name}
+            <div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: 2 }}>VS</div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p2.tag), marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {match.p2.name}
+              </div>
+              <input
+                type="number" min={0} value={sets[0].s2}
+                onChange={e => updateSet(0, 's2', e.target.value)} onKeyDown={handleKey}
+                placeholder="0"
+                style={{
+                  width: '100%', padding: '12px 8px', textAlign: 'center', fontSize: 28, fontWeight: 800,
+                  background: 'var(--surface3, rgba(255,255,255,0.06))', border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10, color: 'var(--white-soft)', outline: 'none',
+                }}
+              />
             </div>
-            <input
-              type="number" min={0} value={s2}
-              onChange={e => setS2(e.target.value)} onKeyDown={handleKey}
-              placeholder="0"
-              style={{
-                width: '100%', padding: '12px 8px', textAlign: 'center',
-                fontSize: 28, fontWeight: 800,
-                background: 'var(--surface3, rgba(255,255,255,0.06))',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 10, color: 'var(--white-soft)', outline: 'none',
-              }}
-            />
           </div>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 8px' }}>
+              <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: tagColor(match.p1.tag), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p1.name}</div>
+              <div style={{ width: 44, textAlign: 'center', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Set</div>
+              <div style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: tagColor(match.p2.tag), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p2.name}</div>
+            </div>
+            {sets.map((set, i) => {
+              const isDisabled = !setStatuses[i].isNeeded;
+              const isP1Win = setStatuses[i].isValid && setStatuses[i].v1 > setStatuses[i].v2;
+              const isP2Win = setStatuses[i].isValid && setStatuses[i].v2 > setStatuses[i].v1;
+              
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: isDisabled ? 0.25 : 1, transition: 'opacity 0.2s' }}>
+                  <input
+                    type="number" min={0} value={set.s1}
+                    disabled={isDisabled}
+                    onChange={e => updateSet(i, 's1', e.target.value)}
+                    onKeyDown={handleKey}
+                    placeholder="-"
+                    style={{
+                      flex: 1, padding: '8px', textAlign: 'center', fontSize: 22, fontWeight: 800,
+                      background: 'var(--surface3, rgba(255,255,255,0.06))',
+                      border: `1px solid ${isP1Win ? 'rgba(34,214,122,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                      borderRadius: 10, color: isP1Win ? 'var(--green)' : 'var(--white-soft)', outline: 'none',
+                    }}
+                  />
+                  <div style={{ width: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--muted)' }}>#{i + 1}</div>
+                  <input
+                    type="number" min={0} value={set.s2}
+                    disabled={isDisabled}
+                    onChange={e => updateSet(i, 's2', e.target.value)}
+                    onKeyDown={handleKey}
+                    placeholder="-"
+                    style={{
+                      flex: 1, padding: '8px', textAlign: 'center', fontSize: 22, fontWeight: 800,
+                      background: 'var(--surface3, rgba(255,255,255,0.06))',
+                      border: `1px solid ${isP2Win ? 'rgba(34,214,122,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                      borderRadius: 10, color: isP2Win ? 'var(--green)' : 'var(--white-soft)', outline: 'none',
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div style={{ minHeight: 24, textAlign: 'center', marginBottom: 16 }}>
           {preview && (
@@ -107,7 +189,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
           >Cancel</button>
           <button
             disabled={!ready}
-            onClick={() => ready && onConfirm(v1, v2)}
+            onClick={() => ready && onConfirm(finalS1, finalS2)}
             style={{
               flex: 2, padding: '10px 0', borderRadius: 10,
               cursor: ready ? 'pointer' : 'not-allowed',
@@ -125,7 +207,7 @@ function ScoreModal({ match, onConfirm, onClose }) {
 }
 
 // ── Match Card ────────────────────────────────────────────────────────
-const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
+const MatchCard = ({ match, bestOf = 1, onWin, onScore, onDraw, showDraw = false }) => {
   const [scoreModal, setScoreModal] = useState(false)
   if (!match) return null
 
@@ -142,7 +224,6 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
     onScore?.(s1, s2)
   }
 
-  // Prevents text overlapping with the absolute positioned buttons
   const rightPadding = isBye ? 40 : 54; 
 
   const renderPlayer = (player, score, isTop) => {
@@ -199,6 +280,7 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
         {scoreModal && canAct && (
           <ScoreModal
             match={match}
+            bestOf={bestOf}
             onClose={() => setScoreModal(false)}
             onConfirm={handleScoreConfirm}
           />
@@ -208,7 +290,7 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
       <div
         className="match-card"
         style={{
-          height: 82, // Hardcoded to 82px to maintain SVG line alignments
+          height: 82,
           background: 'var(--surface2, rgba(20,20,30,0.8))',
           border: '1px solid var(--border, rgba(255,255,255,0.1))',
           borderRadius: 8,
@@ -297,5 +379,6 @@ const MatchCard = ({ match, onWin, onScore, onDraw, showDraw = false }) => {
 
 export default memo(MatchCard, (prev, next) =>
   prev.match === next.match &&
-  prev.showDraw === next.showDraw
+  prev.showDraw === next.showDraw &&
+  prev.bestOf === next.bestOf
 )
