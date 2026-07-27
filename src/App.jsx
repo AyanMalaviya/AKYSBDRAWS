@@ -401,26 +401,21 @@ export default function App() {
       return
     }
 
-    // --- NEW LOGIC FOR KNOCKOUT BYES ---
     let playersToSeed = [...taggedAdvancers]
     let round1ByePlayer = null
 
-    // If there is an odd number of players, extract the absolute best player for the bye
     if (playersToSeed.length % 2 !== 0) {
       round1ByePlayer = pickByePlayer(playersToSeed)
       playersToSeed = playersToSeed.filter(p => p.id !== round1ByePlayer.id)
     }
 
-    // Seed the remaining players normally (A vs C, B vs B)
     const seededKnockout = seedKnockoutPlayers(playersToSeed)
 
-    // Push the best player to the very end so the bracket engine pairs them with 'null'
     if (round1ByePlayer) {
       seededKnockout.push(round1ByePlayer)
     }
 
     let bracket = generateStage2Elim(seededKnockout)
-    // -----------------------------------
     
     if (bracket.pendingByeSelection) {
       const byePlayer = pickByePlayer(bracket.pendingByeSelection)
@@ -536,7 +531,7 @@ export default function App() {
           )}
           <button
             className={`nav-pill${view !== 'dashboard' ? ' active' : ''}`}
-            onClick={handleLogoClick}
+            onClick={handleHome}
           >
             <span className="hide-mob">New </span>Draw
           </button>
@@ -581,7 +576,7 @@ export default function App() {
           <GroupView
             groups={renderGroups}
             onGroupsUpdate={handleGroupsUpdate}
-            onBack={handleLogoClick}
+            onBack={handleHome}
             onAdvanceToStage2={handleAdvanceToStage2}
             hasStage2={!!(tournament?.stage2)}
             onGoToStage2={() => navigate('stage2', { 
