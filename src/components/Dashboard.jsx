@@ -31,14 +31,84 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
   const [confirmId, setConfirmId]   = useState(null)
   const [confirmAllFlag, setAll]    = useState(false)
 
-  // FILTER: Only show tournaments that have been moved to history (archived)
-  const archivedHistory = history.filter(entry => entry.isArchived)
+  // Split history into Active and Archived
+  const activeTournaments = history.filter(entry => !entry.isArchived)
+  const archivedTournaments = history.filter(entry => entry.isArchived)
 
-  if (archivedHistory.length === 0) return (
+  if (history.length === 0) return (
     <div className="empty-state">
       <div style={{ fontSize: 52, filter: 'grayscale(0.3)' }}>📂</div>
       <div style={{ fontSize: 18, fontWeight: 800 }}>No history yet</div>
-      <div style={{ fontSize: 14, color: 'var(--muted)' }}>Delete a tournament from the Setup Lobby to move it here.</div>
+      <div style={{ fontSize: 14, color: 'var(--muted)' }}>Your saved tournaments will appear here.</div>
+    </div>
+  )
+
+  const renderGrid = (tournaments, isArchivedSection) => (
+    <div className="history-grid">
+      <AnimatePresence>
+        {tournaments.map((entry, i) => {
+          const f = FORMATS.find(x => x.id === entry.format)
+          return (
+            <motion.div key={entry.id} className="hcard"
+              initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
+              <div className="hcard-top">
+                {entry.type === 'group' ? (
+                  <>
+                    <span className="tag tag-orange">GRP</span>
+                    <span className="hcard-fmt">{entry.title || 'Group Stage'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={`tag ${f?.color}`}>{f?.tag}</span>
+                    <span className="hcard-fmt">{f?.label}</span>
+                    {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
+                  </>
+                )}
+              </div>
+              <div className="hcard-meta">
+                <span>👥 {entry.playerCount} players</span>
+                <span>🕒 {fmtDate(entry.savedAt)}</span>
+              </div>
+              
+              {entry.champion && (
+                <div style={{
+                  marginTop: 12, marginBottom: 4, padding: '8px 12px',
+                  background: 'linear-gradient(90deg, rgba(255,215,0,0.15), rgba(255,215,0,0.02))',
+                  borderLeft: '3px solid var(--neon-yellow)',
+                  borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8
+                }}>
+                  <span style={{ fontSize: 18 }}>🏆</span>
+                  <span style={{ color: 'var(--neon-yellow)', fontWeight: 800, fontSize: 14 }}>
+                    Winner: {entry.champion.name}
+                  </span>
+                </div>
+              )}
+
+              <div className="hcard-players" style={{ marginTop: entry.champion ? 8 : 12 }}>
+                {entry.players.slice(0, 6).map(p => {
+                  const isChamp = entry.champion?.id === p.id;
+                  return (
+                    <span key={p.id} className="p-chip" style={
+                      isChamp ? { background: 'rgba(255,215,0,0.2)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)' } : {}
+                    }>
+                      {isChamp && <span style={{ marginRight: 4 }}>🏆</span>}
+                      {p.name}
+                    </span>
+                  )
+                })}
+                {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
+              </div>
+              <div className="hcard-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => onRestore(entry)}>
+                  {isArchivedSection ? '↩ Restore' : '▶ Resume Live'}
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={() => setConfirmId(entry.id)}>Delete</button>
+              </div>
+            </motion.div>
+          )
+        })}
+      </AnimatePresence>
     </div>
   )
 
@@ -46,89 +116,41 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
     <div>
       <div className="dash-header">
         <div>
-          <div className="dash-title">Tournament History</div>
-          <div className="dash-sub">{archivedHistory.length} saved tournament{archivedHistory.length!==1?'s':''}</div>
+          <div className="dash-title">Tournament Data</div>
+          <div className="dash-sub">{history.length} total saved tournament{history.length!==1?'s':''}</div>
         </div>
         <button className="btn btn-danger btn-sm" onClick={() => setAll(true)}>🗑 Clear All</button>
       </div>
 
-      <div className="history-grid">
-        <AnimatePresence>
-          {archivedHistory.map((entry, i) => {
-            const f = FORMATS.find(x => x.id === entry.format)
-            return (
-              <motion.div key={entry.id} className="hcard"
-                initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
-                <div className="hcard-top">
-                  {entry.type === 'group' ? (
-                    <>
-                      <span className="tag tag-orange">GRP</span>
-                      <span className="hcard-fmt">{entry.title || 'Group Stage'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className={`tag ${f?.color}`}>{f?.tag}</span>
-                      <span className="hcard-fmt">{f?.label}</span>
-                      {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
-                    </>
-                  )}
-                </div>
-                <div className="hcard-meta">
-                  <span>👥 {entry.playerCount} players</span>
-                  <span>🕒 {fmtDate(entry.savedAt)}</span>
-                </div>
-                
-                {/* NEW: Champion Highlight Banner */}
-                {entry.champion && (
-                  <div style={{
-                    marginTop: 12, marginBottom: 4, padding: '8px 12px',
-                    background: 'linear-gradient(90deg, rgba(255,215,0,0.15), rgba(255,215,0,0.02))',
-                    borderLeft: '3px solid var(--neon-yellow)',
-                    borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8
-                  }}>
-                    <span style={{ fontSize: 18 }}>🏆</span>
-                    <span style={{ color: 'var(--neon-yellow)', fontWeight: 800, fontSize: 14 }}>
-                      Winner: {entry.champion.name}
-                    </span>
-                  </div>
-                )}
+      {activeTournaments.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ color: 'var(--green)', fontSize: 16, fontWeight: 800, marginBottom: 16, borderBottom: '1px solid rgba(34,214,122,0.2)', paddingBottom: 8 }}>
+            🟢 Active Tournaments
+          </h3>
+          {renderGrid(activeTournaments, false)}
+        </div>
+      )}
 
-                <div className="hcard-players" style={{ marginTop: entry.champion ? 8 : 12 }}>
-                  {entry.players.slice(0, 6).map(p => {
-                    const isChamp = entry.champion?.id === p.id;
-                    return (
-                      <span key={p.id} className="p-chip" style={
-                        isChamp ? { background: 'rgba(255,215,0,0.2)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)' } : {}
-                      }>
-                        {isChamp && <span style={{ marginRight: 4 }}>🏆</span>}
-                        {p.name}
-                      </span>
-                    )
-                  })}
-                  {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
-                </div>
-                <div className="hcard-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => onRestore(entry)}>↩ Restore</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => setConfirmId(entry.id)}>Delete</button>
-                </div>
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
-      </div>
+      {archivedTournaments.length > 0 && (
+        <div>
+          <h3 style={{ color: 'var(--muted)', fontSize: 16, fontWeight: 800, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 8 }}>
+            📂 Archived History
+          </h3>
+          {renderGrid(archivedTournaments, true)}
+        </div>
+      )}
 
       <AnimatePresence>
         {confirmId && (
           <ConfirmModal
-            msg="Permanently delete this tournament from history? This cannot be undone."
+            msg="Permanently delete this tournament? This cannot be undone."
             onConfirm={() => { onDelete(confirmId); setConfirmId(null) }}
             onCancel={() => setConfirmId(null)}
           />
         )}
         {confirmAllFlag && (
           <ConfirmModal
-            msg={`Delete all ${archivedHistory.length} tournaments? This cannot be undone.`}
+            msg={`Delete all ${history.length} tournaments? This cannot be undone.`}
             onConfirm={() => { onDeleteAll(); setAll(false) }}
             onCancel={() => setAll(false)}
           />

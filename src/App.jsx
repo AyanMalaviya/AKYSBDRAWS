@@ -429,14 +429,33 @@ export default function App() {
     navigate('dashboard', { tournament, groups, stage2 })
   }, [navigate, tournament, groups, stage2])
 
-    // Callback for BackupSync to refresh history state after a merge
   const handleHistoryChange = useCallback((merged) => {
-    // useHistory keeps its own ref; we call syncHistory if exposed, otherwise
-    // re-read from idb-keyval indirectly by forcing a page-level state update.
-    // The cleanest approach: expose syncHistory from useHistory.
     if (typeof syncHistory === 'function') {
       syncHistory(merged)
     }
+
+    setTournament(prev => {
+      if (!prev) return prev
+      const incoming = merged.find(t => t.id === prev.id)
+      
+      if (incoming) {
+        if (incoming.groups) setGroups(incoming.groups)
+        if (incoming.stage2) setStage2(incoming.stage2)
+        
+        stackRef.current.forEach((f, i) => {
+          if (f.tournament?.id === incoming.id) {
+            stackRef.current[i] = {
+              ...f,
+              tournament: incoming,
+              groups: incoming.groups || f.groups,
+              stage2: incoming.stage2 || f.stage2
+            }
+          }
+        })
+        return incoming
+      }
+      return prev
+    })
   }, [syncHistory])
 
 
