@@ -2,12 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TAG_META } from '../engine/groupEngine.js'
 
-const TinyTag = ({ tag }) => (
-  <span
-    className={`tag ${TAG_META[tag || 'C']?.badge || 'tag-green'}`}
-    style={{ fontSize: 8, padding: '1px 5px', letterSpacing: 0.5, flexShrink: 0, lineHeight: 1.4 }}
-  >{tag || 'C'}</span>
-)
+const tagColor = (tag) => TAG_META[tag || 'C']?.color || TAG_META['C'].color
 
 const medalEmoji = ['🥇', '🥈', '🥉']
 
@@ -63,9 +58,9 @@ export default function Scoreboard({ groups }) {
         {/* Mini top-3 preview */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginRight: 8 }}>
           {rows.slice(0, 3).map((r, i) => (
-            <div key={r.id} style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+            <div key={r.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}>
               <span>{medalEmoji[i]}</span>
-              <span style={{ maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--white-soft)', fontWeight: 700 }}>{r.name}</span>
+              <span style={{ maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tagColor(r.tag), fontWeight: 700 }}>{r.name}</span>
             </div>
           ))}
         </div>
@@ -110,10 +105,7 @@ export default function Scoreboard({ groups }) {
                         {medalEmoji[idx] ?? idx + 1}
                       </td>
                       <td style={{ padding: '7px 6px', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <TinyTag tag={r.tag} />
-                          <span style={{ fontWeight: 700, color: idx < 3 ? 'var(--white-soft)' : 'var(--text)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
-                        </div>
+                        <span style={{ fontWeight: 700, color: tagColor(r.tag), maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', verticalAlign: 'middle' }}>{r.name}</span>
                       </td>
                       <td style={{ padding: '7px 6px', textAlign: 'center', color: 'var(--muted)', fontSize: 11 }}>{r.groupName}</td>
                       <td style={{ padding: '7px 6px', textAlign: 'center', color: 'var(--muted)' }}>{r.played ?? 0}</td>

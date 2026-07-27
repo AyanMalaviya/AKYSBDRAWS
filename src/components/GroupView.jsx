@@ -16,12 +16,8 @@ import {
 import Scoreboard from './Scoreboard.jsx'
 import '../group.css'
 
-const TinyTag = ({ tag }) => (
-  <span
-    className={`tag ${TAG_META[tag || 'C']?.badge || 'tag-green'}`}
-    style={{ fontSize: 8, padding: '1px 5px', letterSpacing: 0.5, flexShrink: 0, lineHeight: 1.4 }}
-  >{tag || 'C'}</span>
-)
+// Returns the CSS color for a given tag letter
+const tagColor = (tag) => TAG_META[tag || 'C']?.color || TAG_META['C'].color
 
 // ── Score Entry Modal ─────────────────────────────────────────────────
 function ScoreModal({ match, onConfirm, onClose }) {
@@ -46,14 +42,12 @@ function ScoreModal({ match, onConfirm, onClose }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ marginBottom: 8 }}><TinyTag tag={match.p1.tag} /></div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8 }}>{match.p1.name}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p1.tag), marginBottom: 8 }}>{match.p1.name}</div>
             <input type="number" min={0} value={s1} onChange={e => setS1(e.target.value)} onKeyDown={handleKey} autoFocus placeholder="0" style={{ width: '100%', padding: '12px 8px', textAlign: 'center', fontSize: 28, fontWeight: 800, background: 'var(--surface3)', border: '1px solid var(--border2)', borderRadius: 10, color: 'var(--white-soft)', outline: 'none', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)' }} />
           </div>
           <div style={{ flexShrink: 0, textAlign: 'center' }}><div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: 2 }}>VS</div></div>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ marginBottom: 8 }}><TinyTag tag={match.p2.tag} /></div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white-soft)', marginBottom: 8 }}>{match.p2.name}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: tagColor(match.p2.tag), marginBottom: 8 }}>{match.p2.name}</div>
             <input type="number" min={0} value={s2} onChange={e => setS2(e.target.value)} onKeyDown={handleKey} placeholder="0" style={{ width: '100%', padding: '12px 8px', textAlign: 'center', fontSize: 28, fontWeight: 800, background: 'var(--surface3)', border: '1px solid var(--border2)', borderRadius: 10, color: 'var(--white-soft)', outline: 'none', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)' }} />
           </div>
         </div>
@@ -76,14 +70,12 @@ const MatchRow = memo(function MatchRow({ match, onResult, onScoreEntry }) {
   return (
     <div className={`gm-row${isDone ? ' gm-done' : ''}`}>
       <button className={`gm-player${match.winner?.id === match.p1.id ? ' gm-win' : ''}`} onClick={() => onResult(match.winner?.id === match.p1.id ? null : match.p1)}>
-        <TinyTag tag={match.p1.tag} />
-        <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p1.name}</span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tagColor(match.p1.tag), fontWeight: 700 }}>{match.p1.name}</span>
         {hasScore && match.winner?.id === match.p1.id && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>{match.score1}–{match.score2}</span>}
       </button>
       <span className="gm-vs">{hasScore && match.winner === 'draw' ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gold-light)' }}>{match.score1}–{match.score2}</span> : 'vs'}</span>
       <button className={`gm-player${match.winner?.id === match.p2.id ? ' gm-win' : ''}`} onClick={() => onResult(match.winner?.id === match.p2.id ? null : match.p2)}>
-        <TinyTag tag={match.p2.tag} />
-        <span style={{ marginLeft: 5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.p2.name}</span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tagColor(match.p2.tag), fontWeight: 700 }}>{match.p2.name}</span>
         {hasScore && match.winner?.id === match.p2.id && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: 'var(--green)', paddingLeft: 6 }}>{match.score2}–{match.score1}</span>}
       </button>
       <button className="gm-draw" title="Enter score" onClick={() => onScoreEntry(match)} style={{ fontSize: 14, minWidth: 34 }}>📊</button>
@@ -112,8 +104,7 @@ function StandingsTable({ standings, advancerIds, tiedIds }) {
                   {i === 0 && isAdv && <span style={{ flexShrink: 0 }}>🏆</span>}
                   {i === 1 && isAdv && <span style={{ flexShrink: 0 }}>⭐</span>}
                   {isTied && <span style={{ flexShrink: 0 }}>⚖️</span>}
-                  <TinyTag tag={s.tag} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tagColor(s.tag), fontWeight: 700 }}>{s.name}</span>
                 </div>
               </td>
               <td>{s.played}</td><td>{s.wins}</td><td>{s.draws}</td><td>{s.losses}</td>
@@ -143,8 +134,7 @@ function TieBreakerPanel({ groupName, tiedPlayers, eliminatedIds, onEliminate, s
         <div className="tb-players">
           {remaining.map(p => (
             <div key={p.id} className="tb-player-row">
-              <TinyTag tag={p.tag} />
-              <span className="tb-player-name">{p.name}</span>
+              <span className="tb-player-name" style={{ color: tagColor(p.tag), fontWeight: 700 }}>{p.name}</span>
               <span className="tb-player-pts">{p.points ?? 0}pts • {p.wins ?? 0}W</span>
               <button className="tb-eliminate-btn" onClick={() => onEliminate(p.id)} title={`Eliminate ${p.name}`}>❌</button>
             </div>
@@ -219,9 +209,8 @@ function SelectAdvancersModal({ groups, defaultCount, onConfirm, onClose }) {
                   {isSelected ? (posEmoji[Array.from(selected).indexOf(p.id)] || '✅') : <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>#{globalRank + 1}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <TinyTag tag={p.tag} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? 'var(--green)' : 'var(--white-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  <div style={{ marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: tagColor(p.tag), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                     {p.groupName} · #{p.rank + 1} in group · {p.wins}W {p.draws}D {p.losses}L
@@ -313,7 +302,7 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
           {group.players.map(p => (
             <div key={p.id} style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(255,255,255,0.04)', padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
               <input value={p.name} onChange={e => onEditAction('update_player', group.id, p.id, { name: e.target.value })} placeholder="Player Name"
-                style={{ flex: '1 1 80px', minWidth: 60, background: 'none', border: 'none', color: 'var(--text)', borderBottom: '1px solid rgba(255,255,255,0.1)', padding: 6, fontSize: 14, outline: 'none' }} />
+                style={{ flex: '1 1 80px', minWidth: 60, background: 'none', border: 'none', color: tagColor(p.tag), borderBottom: `1px solid ${tagColor(p.tag)}44`, padding: 6, fontSize: 14, fontWeight: 700, outline: 'none' }} />
               <select value={p.tag} onChange={e => onEditAction('update_player', group.id, p.id, { tag: e.target.value })}
                 style={{ flexShrink: 0, width: 48, background: 'var(--surface)', border: `1px solid ${TAG_META[p.tag || 'C'].color}`, color: TAG_META[p.tag || 'C'].color, padding: '6px 4px', borderRadius: 6, fontWeight: 'bold', outline: 'none', textAlign: 'center', cursor: 'pointer' }}>
                 <option value="A">A</option><option value="B">B</option><option value="C">C</option>
@@ -338,7 +327,7 @@ function GroupCard({ group, allGroups, onUpdate, onUpdateWithScore, isEditing, o
                 {finalAdvancers.map((p, idx) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: idx < finalAdvancers.length - 1 ? 4 : 0 }}>
                     <span style={{ fontSize: 15 }}>{posEmoji[idx] || '▶'}</span>
-                    <span style={{ fontWeight: idx === 0 ? 800 : 700, fontSize: idx === 0 ? 14 : 13, color: idx === 0 ? 'var(--white-soft)' : 'var(--muted)' }}>{p.name}</span>
+                    <span style={{ fontWeight: idx === 0 ? 800 : 700, fontSize: idx === 0 ? 14 : 13, color: tagColor(p.tag) }}>{p.name}</span>
                     <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{group.standings.find(s => s.id === p.id)?.points ?? 0}pts</span>
                   </div>
                 ))}
@@ -383,8 +372,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
   const [confirmedAdvancers, setConfirmedAdvancers] = useState(null)
   const [showStage2Config, setShowStage2Config]     = useState(false)
 
-  // ── Prop refs: always point to the latest prop, so callbacks
-  //    created once never close over a stale prop value.
   const onGroupsUpdateRef    = useRef(onGroupsUpdate)
   const onAdvanceToStage2Ref = useRef(onAdvanceToStage2)
   useEffect(() => { onGroupsUpdateRef.current    = onGroupsUpdate    }, [onGroupsUpdate])
@@ -439,9 +426,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     resetStage2Flow()
   }, [resetStage2Flow])
 
-  // FIX: wrap in useCallback so GroupCard children don't re-render on every
-  // keystroke in an unrelated part of the form. Uses functional setDraftGroups
-  // to always operate on the latest draft without closing over a stale copy.
   const handleEditAction = useCallback((action, groupId, playerId, payload) => {
     setDraftGroups(prev => {
       if (!prev) return prev
@@ -456,7 +440,6 @@ export default function GroupView({ groups, onGroupsUpdate, onBack, onAdvanceToS
     })
   }, [])
 
-  // FIX: stable callback — uses functional updater so no stale draftGroups closure
   const handleCreateGroup = useCallback(() => {
     setDraftGroups(prev => createNewGroup(prev))
   }, [])
