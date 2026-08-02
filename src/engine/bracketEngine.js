@@ -37,7 +37,6 @@ function padWithByes(players) {
   return padded
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 function autoAdvanceByesInRound(draftRounds, roundIdx) {
   const round = draftRounds[roundIdx]
   round.forEach((match, matchIdx) => {
@@ -57,20 +56,16 @@ export function generateSingleElim(players) {
   const rounds = []
   let cur = []
 
-  // Pair players exactly as they come without power of 2 padding
   for (let i = 0; i < players.length; i += 2) {
     cur.push(makeMatch(players[i], players[i + 1] ?? null, 1))
   }
   rounds.push(cur)
 
-  // Build future rounds and flag structurally dead slots
   let rn = 2, prev = cur
   while (prev.length > 1) {
     const next = []
     for (let i = 0; i < prev.length; i += 2) {
       const match = makeMatch(null, null, rn)
-      
-      // If the previous round has no match to feed into the p2 slot, this branch is structurally dead
       if (!prev[i + 1]) {
         match.isStructurallyDead = true
       }
@@ -89,22 +84,17 @@ export function generateSingleElim(players) {
 
 function _advanceSingleElimDraft(draft, roundIdx, matchIdx, winner, score1, score2) {
   if (winner === null) {
-    // Allow structural byes to be cleared if a previous round is undone
     if (draft.rounds[roundIdx][matchIdx].isBye && !draft.rounds[roundIdx][matchIdx].isStructurallyDead) return
-    
     draft.rounds[roundIdx][matchIdx].winner = null
     draft.rounds[roundIdx][matchIdx].score1 = null
     draft.rounds[roundIdx][matchIdx].score2 = null
     let cur = matchIdx
-    
     for (let r = roundIdx + 1; r < draft.rounds.length; r++) {
       const next = Math.floor(cur / 2)
       const slot = cur % 2 === 0 ? 'p1' : 'p2'
       const m = draft.rounds[r][next]
       if (!m) break
       m[slot] = null; m.winner = null; m.score1 = null; m.score2 = null
-      
-      // Reset the state of the structural bye if the feeder match is undone
       if (m.isStructurallyDead && m.isBye) m.isBye = false
       cur = next
     }
@@ -115,16 +105,13 @@ function _advanceSingleElimDraft(draft, roundIdx, matchIdx, winner, score1, scor
   draft.rounds[roundIdx][matchIdx].winner = winner
   if (score1 != null) draft.rounds[roundIdx][matchIdx].score1 = score1
   if (score2 != null) draft.rounds[roundIdx][matchIdx].score2 = score2
-  
+
   const nextRound = draft.rounds[roundIdx + 1]
   if (nextRound) {
     const nextMatchIdx = Math.floor(matchIdx / 2)
     const slot = matchIdx % 2 === 0 ? 'p1' : 'p2'
     const targetMatch = nextRound[nextMatchIdx]
-    
     targetMatch[slot] = winner
-
-    // Automatically advance the player if their match is missing a second feeder branch
     if (targetMatch.isStructurallyDead) {
       targetMatch.isBye = true
       _advanceSingleElimDraft(draft, roundIdx + 1, nextMatchIdx, winner, null, null)
@@ -150,28 +137,21 @@ export function advanceSingleElimWithScore(bracket, roundIdx, matchIdx, score1, 
 }
 
 function recomputeBracketStandings(draft) {
-  // 1. Reset all standings to zero
   draft.standings = draft.standings.map(s => ({
     ...s, played: 0, wins: 0, draws: 0, losses: 0, points: 0,
     scoredFor: 0, scoredAgainst: 0, scoreDiff: 0
   }))
 
-  // 2. Tally up points and score differentials from all finished matches
   draft.rounds.forEach(round => {
     round.forEach(m => {
       if (!m.winner || m.isBye) return
-
       const p1s = draft.standings.find(s => s.id === m.p1?.id)
       const p2s = draft.standings.find(s => s.id === m.p2?.id)
       if (!p1s || !p2s) return
-
-      // Handle scores
       if (m.score1 != null && m.score2 != null) {
         p1s.scoredFor += m.score1; p1s.scoredAgainst += m.score2
         p2s.scoredFor += m.score2; p2s.scoredAgainst += m.score1
       }
-
-      // Handle match outcomes
       if (m.winner === 'draw') {
         p1s.draws++; p1s.points++; p1s.played++
         p2s.draws++; p2s.points++; p2s.played++
@@ -185,7 +165,6 @@ function recomputeBracketStandings(draft) {
     })
   })
 
-  // 3. Calculate Score Difference (SD) and Sort
   draft.standings.forEach(s => { s.scoreDiff = s.scoredFor - s.scoredAgainst })
   draft.standings.sort((a, b) =>
     (b.points    - a.points)    ||
@@ -194,15 +173,12 @@ function recomputeBracketStandings(draft) {
     (a.name || '').localeCompare(b.name || '')
   )
 
-  // 4. Auto-assign champion if all matches are completed
   const allDone = draft.rounds.every(r => r.every(m => m.winner || m.isBye))
   draft.champion = allDone ? draft.standings[0] : null
 }
 
 export function generateStage2Elim(players) {
-  // Pass the raw players array directly instead of padWithByes(players)
   const slots = players
-
   const rounds = []
   const cur    = []
   for (let i = 0; i < slots.length; i += 2) {
@@ -254,18 +230,28 @@ function _finalizeStage2Match(draft, roundIdx, matchIdx, winner, score1, score2)
   }
 }
 
+// FIX: when byePlayerId is provided, guard the splice so a not-found id
+// never defaults to index 0 (which was causing the first player to always
+// get the bye). If the id is genuinely missing we bail out gracefully.
 export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, byePlayerId = null) {
   return produce(bracket, draft => {
     if (byePlayerId) {
+      const advancing = draft.rounds[roundIdx].map(m => m.winner)
+      const byeIdx    = advancing.findIndex(p => p?.id === byePlayerId)
+
+      // Guard: if the requested bye player isn't found, don't silently
+      // pick index 0 — skip bye resolution so App can retry with correct id.
+      if (byeIdx === -1) return
+
       draft.pendingByeSelection = null
-      let advancing = [...draft.rounds[roundIdx].map(m => m.winner)]
-      const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId)
-      const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0]
+      const remaining = [...advancing]
+      const [byePlayer] = remaining.splice(byeIdx, 1)
+
       const nextRoundMatches = []
       const rn = roundIdx + 2
-      let left = 0, right = advancing.length - 1
+      let left = 0, right = remaining.length - 1
       while (left < right) {
-        nextRoundMatches.push(makeMatch(advancing[left], advancing[right], rn, 'stage2'))
+        nextRoundMatches.push(makeMatch(remaining[left], remaining[right], rn, 'stage2'))
         left++; right--
       }
       const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, 'stage2')
@@ -294,7 +280,7 @@ export function generateDoubleElim(players) {
   const size = slots.length
   const wRounds = []
   let wCur = []
-  for (let i = 0; i < size; i += 2) wCur.push(makeMatch(seeded[i], seeded[i + 1], 1, 'winners'))
+  for (let i = 0; i < size; i += 2) wCur.push(makeMatch(slots[i], slots[i + 1], 1, 'winners'))
   wRounds.push(wCur)
   let rn = 2, wPrev = wCur
   while (wPrev.length > 1) {
@@ -382,7 +368,7 @@ export function generateRoundRobin(players) {
   const list = players.length % 2 === 0 ? [...players] : [...players, { name: 'BYE', id: 'bye' }]
   const total = list.length
   const rounds = []
-  
+
   for (let r = 0; r < total - 1; r++) {
     const roundMatches = []
     for (let i = 0; i < total / 2; i++) {
@@ -394,14 +380,13 @@ export function generateRoundRobin(players) {
     rounds.push(roundMatches)
     list.splice(1, 0, list.pop())
   }
-  
-  // Added scoredFor, scoredAgainst, and scoreDiff to initial state
-  const standings = players.map(p => ({ 
-    ...p, 
+
+  const standings = players.map(p => ({
+    ...p,
     played: 0, wins: 0, draws: 0, losses: 0, points: 0,
     scoredFor: 0, scoredAgainst: 0, scoreDiff: 0
   }))
-  
+
   return { type: 'round_robin', rounds, standings, champion: null }
 }
 
@@ -409,7 +394,7 @@ export function advanceWinnerRoundRobin(bracket, roundIdx, matchIdx, winner) {
   return produce(bracket, draft => {
     const match = draft.rounds[roundIdx][matchIdx]
     match.winner = winner
-    match.score1 = null // Clear scores if switching to manual winner override
+    match.score1 = null
     match.score2 = null
     recomputeBracketStandings(draft)
   })
@@ -419,7 +404,7 @@ export function setDrawRoundRobin(bracket, roundIdx, matchIdx) {
   return produce(bracket, draft => {
     const match = draft.rounds[roundIdx][matchIdx]
     match.winner = 'draw'
-    match.score1 = null 
+    match.score1 = null
     match.score2 = null
     recomputeBracketStandings(draft)
   })
@@ -429,15 +414,11 @@ export function advanceRoundRobinWithScore(bracket, roundIdx, matchIdx, score1, 
   return produce(bracket, draft => {
     const match = draft.rounds[roundIdx][matchIdx]
     if (!match.p1 || !match.p2) return
-    
-    // Automatically assign the winner based on numeric values
-    if (score1 > score2) match.winner = match.p1
+    if (score1 > score2)      match.winner = match.p1
     else if (score2 > score1) match.winner = match.p2
-    else match.winner = 'draw'
-    
+    else                      match.winner = 'draw'
     match.score1 = score1
     match.score2 = score2
-    
     recomputeBracketStandings(draft)
   })
 }
@@ -460,7 +441,7 @@ export function generateBracket(format, players) {
     case 'single_elim': return generateSingleElim(players)
     case 'double_elim': return generateDoubleElim(players)
     case 'round_robin': return generateRoundRobin(players)
-    case 'swiss': return generateSwiss(players)
+    case 'swiss':       return generateSwiss(players)
     default: throw new Error(`Unknown format: ${format}`)
   }
 }
