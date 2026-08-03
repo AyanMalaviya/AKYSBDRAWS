@@ -1,85 +1,75 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { get, set } from 'idb-keyval'
-
-const KEY = 'akysbdraws_history'
+import { useState, useEffect, useCallback } from 'react';
 
 export function useHistory() {
-  const [history, setHistory] = useState([])
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('akysb_tournaments');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse history from localStorage", e);
+      return [];
+    }
+  });
 
-  // Always hold latest history state in a ref so callbacks never go stale
-  const historyRef = useRef([])
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    get(KEY).then((val) => {
-      if (val) {
-        const parsed = JSON.parse(val)
-        historyRef.current = parsed
-        setHistory(parsed)
-      }
-      setIsLoaded(true)
-    }).catch(() => setIsLoaded(true))
-  }, [])
+    setIsLoaded(true);
+  }, []);
 
-  // Keep ref in sync with state — also exported so BackupSync can push merged data
-  const syncHistory = useCallback((next) => {
-    historyRef.current = next
-    setHistory(next)
-    set(KEY, JSON.stringify(next)).catch(e => console.error('Storage error:', e))
-  }, [])
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('akysb_tournaments', JSON.stringify(history));
+    }
+  }, [history, isLoaded]);
 
   const upsertHistory = useCallback((tournament) => {
-    if (!tournament?.id) return
-    const champ = tournament.stage2?.bracket?.champion || tournament.bracket?.champion || null
-    const prev  = historyRef.current
-    const existing            = prev.findIndex(e => e.id === tournament.id)
-    const previouslyArchived  = existing >= 0 ? prev[existing].isArchived : false
-    const shouldArchive       = previouslyArchived || tournament.isArchived || !!champ
+    setHistory(prev => {
+      const idx = prev.findIndex(t => t.id === tournament.id);
+      let next = [...prev];
+      
+      if (idx >= 0) {
+        next[idx] = tournament;
+      } else {
+        next = [tournament, ...prev];
+      }
 
-    const entry = {
-      id:          tournament.id,
-      savedAt:     new Date().toISOString(),
-      type:        tournament.type   || 'bracket',
-      title:       tournament.title  || '',
-      format:      tournament.format || 'groups',
-      playerCount: tournament.players?.length || 0,
-      players:     tournament.players  || [],
-      bracket:     tournament.bracket,
-      groups:      tournament.groups,
-      stage2:      tournament.stage2,
-      round2Groups:  tournament.round2Groups,
-      round2Players: tournament.round2Players,
-      round:       tournament.round,
-      champion:    champ,
-      isArchived:  shouldArchive,
-    }
+      // 1. Separate the tournaments into two distinct buckets
+      const groupDraws = next.filter(t => t.type === 'group');
+      // Everything else (single_elim, double_elim, round_robin, swiss) acts as a Bracket
+      const bracketDraws = next.filter(t => t.type !== 'group'); 
 
-    const next = [...prev]
-    if (existing >= 0) {
-      next[existing] = entry
-    } else {
-      next.unshift(entry)
-      if (next.length > 30) next.length = 30
-    }
-    syncHistory(next)
-  }, [syncHistory])
+      // 2. Enforce the 10-tournament limit on each bucket independently
+      const limitedGroups = groupDraws.slice(0, 10);
+      const limitedBrackets = bracketDraws.slice(0, 10);
+
+      // 3. Create a Set of allowed IDs to maintain the exact chronological order of 'next'
+      const allowedIds = new Set([
+        ...limitedGroups.map(t => t.id),
+        ...limitedBrackets.map(t => t.id)
+      ]);
+
+      return next.filter(t => allowedIds.has(t.id));
+    });
+  }, []);
 
   const archiveEntry = useCallback((id) => {
-    const next = historyRef.current.map(e => e.id === id ? { ...e, isArchived: true } : e)
-    syncHistory(next)
-  }, [syncHistory])
+    setHistory(prev => prev.map(t => 
+      t.id === id ? { ...t, isArchived: true } : t
+    ));
+  }, []);
 
   const deleteEntry = useCallback((id) => {
-    const next = historyRef.current.filter(e => e.id !== id)
-    syncHistory(next)
-  }, [syncHistory])
+    setHistory(prev => prev.filter(t => t.id !== id));
+  }, []);
 
   const deleteAll = useCallback(() => {
-    const next = historyRef.current.filter(e => !e.isArchived)
-    syncHistory(next)
-  }, [syncHistory])
+    setHistory([]);
+  }, []);
 
-  const restoreEntry = useCallback((entry) => entry, [])
+  const syncHistory = useCallback((merged) => {
+    setHistory(merged);
+  }, []);
 
-  return { history, isLoaded, upsertHistory, deleteEntry, deleteAll, restoreEntry, archiveEntry, syncHistory }
+  return { history, isLoaded, upsertHistory, archiveEntry, deleteEntry, deleteAll, syncHistory };
 }

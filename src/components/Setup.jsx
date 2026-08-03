@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import { TAG_META } from '../engine/groupEngine.js'
@@ -16,12 +16,12 @@ const makePlayers = (n, old) => Array.from({ length: n }, (_, i) => old?.[i] ?? 
 
 const defaults = {
   mode:          MODE_BRACKET,
-  format:        'single_elim',
-  count:         DEFAULT_COUNT,
-  custom:        '',
-  names:         makePlayers(DEFAULT_COUNT),
+  // Group state
   groupSetups:   [],
   activeGroupId: null,
+  // Bracket state
+  bracketSetups: [],
+  activeBracketId: null,
 }
 
 // ── Confirm Modal ────────────────────────────────────────────────────
@@ -81,48 +81,105 @@ function Section({ step, title, action, children }) {
   )
 }
 
-export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGroup, history = [] }) {
+export default function Setup({ onStart, onGroupStart, onOpenGroup, onOpenBracket, onArchiveGroup, history = [] }) {
   const [s, set, clearAll] = useSetupStorage(defaults)
 
-  // ── Confirmation dialog state ──
-  const [confirmDeleteId,    setConfirmDeleteId]    = useState(null)  // lobby card delete
-  const [confirmReset,       setConfirmReset]       = useState(false) // reset all setup data
-  const [confirmClearNames,  setConfirmClearNames]  = useState(false) // clear bracket names
-  const [confirmClearGroup,  setConfirmClearGroup]  = useState(false) // clear group names
-  const [confirmRegenerate,  setConfirmRegenerate]  = useState(false) // regenerate groups
+  const [confirmDeleteId,   setConfirmDeleteId]   = useState(null)
+  const [confirmDeleteType, setConfirmDeleteType] = useState(null) // 'group' or 'bracket'
+  const [confirmReset,      setConfirmReset]      = useState(false) 
+  const [confirmClearNames, setConfirmClearNames] = useState(false)
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false)
 
+  // Auto-cleanup cards that have been archived (finished)
   useEffect(() => {
     const archivedIds = history.filter(h => h.isArchived).map(h => h.id)
-    if (archivedIds.length > 0 && s.groupSetups.length > 0) {
+    
+    if (archivedIds.length > 0 && s.groupSetups?.length > 0) {
       const remaining = s.groupSetups.filter(g => !archivedIds.includes(g.id))
       if (remaining.length !== s.groupSetups.length) {
         set('groupSetups', remaining)
         if (archivedIds.includes(s.activeGroupId)) set('activeGroupId', null)
       }
     }
-  }, [history, s.groupSetups, s.activeGroupId, set])
 
-  // ── Bracket helpers ──
-  const applyCount = (n) => { set('count', n); set('custom', String(n)); set('names', makePlayers(n, s.names)) }
-  const onCustomBracket = (val) => {
-    set('custom', val)
-    const n = parseInt(val)
-    if (!isNaN(n) && n >= 2 && n <= 64) { set('count', n); set('names', makePlayers(n, s.names)) }
+    if (archivedIds.length > 0 && s.bracketSetups?.length > 0) {
+      const remainingBrackets = s.bracketSetups.filter(b => !archivedIds.includes(b.id))
+      if (remainingBrackets.length !== s.bracketSetups.length) {
+        set('bracketSetups', remainingBrackets)
+        if (archivedIds.includes(s.activeBracketId)) set('activeBracketId', null)
+      }
+    }
+  }, [history, s.groupSetups, s.bracketSetups, s.activeGroupId, s.activeBracketId, set])
+
+  // ═══════════════ BRACKET HELPERS ═══════════════
+  const activeBracket = (s.bracketSetups || []).find(b => b.id === s.activeBracketId)
+  const isActiveBracketGenerated = activeBracket ? history.some(h => h.id === activeBracket.id) : false
+
+  const handleCreateBracket = () => {
+    if ((s.bracketSetups || []).length >= 10) { alert('Maximum of 10 active bracket setups reached!'); return }
+    const title = prompt('Enter Bracket Title (e.g., U18 Boys Knockout):')
+    if (!title) return
+    const newId = Date.now().toString()
+    const newSetup = { id: newId, title, format: 'single_elim', count: DEFAULT_COUNT, custom: String(DEFAULT_COUNT), players: makePlayers(DEFAULT_COUNT) }
+    set('bracketSetups', [...(s.bracketSetups || []), newSetup])
+    set('activeBracketId', newId)
   }
-  const updateName  = (i, v) => set('names', prev => prev.map((x, idx) => idx === i ? { ...x, name: v } : x))
-  const clearNames  = () => set('names', s.names.map(p => ({ ...p, name: '' })))
 
-  // ── Group helpers ──
-  const activeGroup        = s.groupSetups.find(g => g.id === s.activeGroupId)
-  const isActiveGenerated  = activeGroup ? history.some(h => h.id === activeGroup.id) : false
+  const updateActiveBracket = (updates) =>
+    set('bracketSetups', prev => prev.map(b => b.id === s.activeBracketId ? { ...b, ...updates } : b))
+
+  const confirmDeleteBracketSetup = (id) => {
+    set('bracketSetups', prev => prev.filter(b => b.id !== id))
+    if (s.activeBracketId === id) set('activeBracketId', null)
+    onArchiveGroup?.(id)
+    setConfirmDeleteId(null)
+    setConfirmDeleteType(null)
+  }
+
+  const applyBracketCount = (n) => {
+    if (!activeBracket) return
+    updateActiveBracket({ count: n, custom: String(n), players: makePlayers(n, activeBracket.players) })
+  }
+
+  const onBracketCustom = (val) => {
+    if (!activeBracket) return
+    updateActiveBracket({ custom: val })
+    const n = parseInt(val)
+    if (!isNaN(n) && n >= 2 && n <= 64) updateActiveBracket({ count: n, players: makePlayers(n, activeBracket.players) })
+  }
+
+  const updateBracketName = (i, v) => {
+    if (!activeBracket) return
+    updateActiveBracket({ players: activeBracket.players.map((x, idx) => idx === i ? { ...x, name: v } : x) })
+  }
+
+  const updateBracketTag = (i, tag) => {
+    if (!activeBracket) return
+    updateActiveBracket({ players: activeBracket.players.map((x, idx) => idx === i ? { ...x, tag } : x) })
+  }
+
+  const clearBracketNames = () => {
+    if (!activeBracket) return
+    updateActiveBracket({ players: activeBracket.players.map(p => ({ ...p, name: '' })) })
+  }
+
+  const doRegenerateBracket = () => {
+    const resolvedPlayers = activeBracket.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+    onStart({ id: activeBracket.id, title: activeBracket.title, format: activeBracket.format, players: resolvedPlayers })
+    setConfirmRegenerate(false)
+  }
+
+  // ═══════════════ GROUP HELPERS ═══════════════
+  const activeGroup = (s.groupSetups || []).find(g => g.id === s.activeGroupId)
+  const isActiveGroupGenerated = activeGroup ? history.some(h => h.id === activeGroup.id) : false
 
   const handleCreateGroup = () => {
-    if (s.groupSetups.length >= 10) { alert('Maximum of 10 active setup cards reached!'); return }
-    const title = prompt('Enter Tournament Title (e.g., U18 Boys):')
+    if ((s.groupSetups || []).length >= 10) { alert('Maximum of 10 active group setups reached!'); return }
+    const title = prompt('Enter Tournament Title (e.g., U18 Boys Groups):')
     if (!title) return
-    const newId    = Date.now().toString()
+    const newId = Date.now().toString()
     const newSetup = { id: newId, title, count: DEFAULT_COUNT, custom: String(DEFAULT_COUNT), size: 4, players: makePlayers(DEFAULT_COUNT) }
-    set('groupSetups', [...s.groupSetups, newSetup])
+    set('groupSetups', [...(s.groupSetups || []), newSetup])
     set('activeGroupId', newId)
   }
 
@@ -134,47 +191,47 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
     if (s.activeGroupId === id) set('activeGroupId', null)
     onArchiveGroup?.(id)
     setConfirmDeleteId(null)
+    setConfirmDeleteType(null)
   }
 
   const applyGroupCount = (n) => {
     if (!activeGroup) return
     updateActiveGroup({ count: n, custom: String(n), players: makePlayers(n, activeGroup.players) })
   }
+
   const onGroupCustom = (val) => {
     if (!activeGroup) return
     updateActiveGroup({ custom: val })
     const n = parseInt(val)
     if (!isNaN(n) && n >= 2 && n <= 64) updateActiveGroup({ count: n, players: makePlayers(n, activeGroup.players) })
   }
+
   const updateGroupName = (i, v) => {
     if (!activeGroup) return
     updateActiveGroup({ players: activeGroup.players.map((x, idx) => idx === i ? { ...x, name: v } : x) })
   }
+
   const updateGroupTag = (i, tag) => {
     if (!activeGroup) return
     updateActiveGroup({ players: activeGroup.players.map((x, idx) => idx === i ? { ...x, tag } : x) })
   }
+
   const clearGroupNames = () => {
     if (!activeGroup) return
     updateActiveGroup({ players: activeGroup.players.map(p => ({ ...p, name: '' })) })
   }
 
-  // ── Regenerate (confirmed) ──
-  const doRegenerate = () => {
+  const doRegenerateGroup = () => {
     const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
     onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
     setConfirmRegenerate(false)
   }
 
-  const fmt           = FORMATS.find(f => f.id === s.format)
-  const resolvedNames = s.names.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
-
   return (
     <div className="su-root">
-
       <TabBar
         active={s.mode}
-        onChange={(m) => { set('mode', m); set('activeGroupId', null) }}
+        onChange={(m) => { set('mode', m); set('activeGroupId', null); set('activeBracketId', null) }}
       />
 
       <AnimatePresence mode="wait">
@@ -185,61 +242,148 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}>
 
-            <Section step="1" title="Format">
-              <div className="su-formats">
-                {FORMATS.map(f => (
-                  <button
-                    key={f.id}
-                    className={`su-format-card${s.format === f.id ? ' su-format-card--sel' : ''}`}
-                    onClick={() => set('format', f.id)}
-                  >
-                    <span className={`tag ${f.color}`}>{f.tag}</span>
-                    <div className="su-format-name">{f.label}</div>
-                    <div className="su-format-desc">{f.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </Section>
-
-            <Section step="2" title="Players">
-              <div className="su-presets">
-                {PRESETS.map(n => (
-                  <button key={n} className={`su-preset${s.count === n ? ' su-preset--sel' : ''}`} onClick={() => applyCount(n)}>{n}</button>
-                ))}
-                <input
-                  type="number" min="2" max="64" placeholder="Custom"
-                  value={s.custom}
-                  onChange={e => onCustomBracket(e.target.value)}
-                  className="su-custom-input"
-                />
-              </div>
-              <div className="su-player-count">{s.names.length} players</div>
-            </Section>
-
-            {s.names.length > 0 && (
-              <Section step="3" title="Names"
-                action={
-                  <button className="su-clear-btn" onClick={() => setConfirmClearNames(true)}>Clear all</button>
-                }>
-                <div className="su-names-grid">
-                  {s.names.map((p, i) => (
-                    <div key={p.id} className="su-name-row">
-                      <span className="su-name-idx">#{i+1}</span>
-                      <input value={p.name} onChange={e => updateName(i, e.target.value)} placeholder={`Player ${i+1}`} />
+            <AnimatePresence mode="wait">
+              {/* ── Bracket Lobby ── */}
+              {s.activeBracketId === null && (
+                <motion.div key="bracket-lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <Section step="1" title={`Active Brackets · ${(s.bracketSetups || []).length}/10`}>
+                    <div className="su-lobby">
+                      {(s.bracketSetups || []).map(b => {
+                        const isGenerated = history.some(h => h.id === b.id)
+                        const fmtMeta = FORMATS.find(f => f.id === b.format)
+                        return (
+                          <div key={b.id} className={`su-lobby-card${isGenerated ? ' su-lobby-card--active' : ''}`}
+                               onClick={() => isGenerated ? onOpenBracket(b.id) : set('activeBracketId', b.id)}>
+                            <div className="su-lobby-card-top">
+                              <div>
+                                <div className="su-lobby-title">{b.title}</div>
+                                <div className="su-lobby-meta">{b.players.length} players · {fmtMeta?.label}</div>
+                              </div>
+                              <div className="su-lobby-badges">
+                                {isGenerated
+                                  ? <span className="su-badge su-badge--live">Live</span>
+                                  : <span className="su-badge su-badge--draft">Draft</span>}
+                              </div>
+                            </div>
+                            <div className="su-lobby-card-actions">
+                              {isGenerated ? (
+                                <>
+                                  <button className="su-lbtn su-lbtn--stage1" onClick={(e) => { e.stopPropagation(); onOpenBracket(b.id) }}>▶ Open Bracket</button>
+                                  <button className="su-lbtn su-lbtn--edit" onClick={(e) => { e.stopPropagation(); set('activeBracketId', b.id) }}>✎ Edit</button>
+                                </>
+                              ) : (
+                                <button className="su-lbtn su-lbtn--open" onClick={(e) => { e.stopPropagation(); set('activeBracketId', b.id) }}>Configure →</button>
+                              )}
+                              <button className="su-lbtn su-lbtn--del" onClick={(e) => { e.stopPropagation(); setConfirmDeleteType('bracket'); setConfirmDeleteId(b.id) }}>✕</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {(s.bracketSetups || []).length < 10 && (
+                        <button className="su-lobby-new" onClick={handleCreateBracket}>
+                          <span className="su-lobby-new-plus">+</span>
+                          <span>New Bracket</span>
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </Section>
-            )}
+                  </Section>
+                </motion.div>
+              )}
 
-            {s.names.length >= 2 && (
-              <div className="su-generate-row">
-                <button className="su-gen-btn" onClick={() => onStart({ format: s.format, players: resolvedNames })}>
-                  Generate Bracket
-                </button>
-                <span className="su-gen-meta">{fmt?.label} · {s.names.length} players</span>
-              </div>
-            )}
+              {/* ── Configure Bracket ── */}
+              {s.activeBracketId !== null && activeBracket && (
+                <motion.div key="configure-bracket" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="su-configure-header">
+                    <button className="su-back-btn" onClick={() => set('activeBracketId', null)}>← Back to Lobby</button>
+                    <span className="su-configure-title">{activeBracket.title}</span>
+                    {isActiveBracketGenerated && <span className="su-badge su-badge--live" style={{ marginLeft: 8 }}>Live</span>}
+                  </div>
+
+                  <Section step="2" title="Format">
+                    <div className="su-formats">
+                      {FORMATS.map(f => (
+                        <button
+                          key={f.id}
+                          className={`su-format-card${activeBracket.format === f.id ? ' su-format-card--sel' : ''}`}
+                          onClick={() => updateActiveBracket({ format: f.id })}
+                        >
+                          <span className={`tag ${f.color}`}>{f.tag}</span>
+                          <div className="su-format-name">{f.label}</div>
+                          <div className="su-format-desc">{f.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </Section>
+
+                  <Section step="3" title="Number of Players">
+                    <div className="su-presets">
+                      {PRESETS.map(n => (
+                        <button key={n} className={`su-preset${activeBracket.count === n ? ' su-preset--sel' : ''}`} onClick={() => applyBracketCount(n)}>{n}</button>
+                      ))}
+                      <input
+                        type="number" min="2" max="64" placeholder="Custom"
+                        value={activeBracket.custom}
+                        onChange={e => onBracketCustom(e.target.value)}
+                        className="su-custom-input"
+                      />
+                    </div>
+                    <div className="su-player-count">{activeBracket.players.length} players</div>
+                  </Section>
+
+                  {activeBracket.players.length > 0 && (
+                    <Section step="4" title="Players & Tags"
+                      action={<button className="su-clear-btn" onClick={() => setConfirmClearNames(true)}>Clear all</button>}>
+                      <div className="su-tag-legend">
+                        {TAGS.map(t => (
+                          <span key={t} className="su-tag-legend-item">
+                            <span className={`tag ${TAG_META[t].badge}`}>{t}</span>
+                            <span className="su-tag-legend-label">{TAG_META[t].label}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="su-names-grid su-names-grid--group">
+                        {activeBracket.players.map((p, i) => (
+                          <div key={p.id} className="su-group-player-row">
+                            <span className="su-name-idx">#{i+1}</span>
+                            <input value={p.name} onChange={e => updateBracketName(i, e.target.value)} placeholder={`Player ${i+1}`} />
+                            <div className="su-tag-pills">
+                              {TAGS.map(t => (
+                                <button
+                                  key={t}
+                                  className={`tag ${TAG_META[t].badge} su-tag-pill${p.tag === t ? ' su-tag-pill--sel' : ''}`}
+                                  onClick={() => updateBracketTag(i, t)}
+                                >{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Section>
+                  )}
+
+                  {activeBracket.players.length >= 2 && (
+                    <div className="su-generate-row">
+                      {isActiveBracketGenerated && (
+                        <div className="su-open-btns">
+                          <button className="su-lbtn su-lbtn--stage1" onClick={() => onOpenBracket(activeBracket.id)}>▶ Open Bracket</button>
+                        </div>
+                      )}
+                      <button className="su-gen-btn" onClick={() => {
+                        if (isActiveBracketGenerated) {
+                          setConfirmRegenerate(true)
+                        } else {
+                          const resolvedPlayers = activeBracket.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
+                          onStart({ id: activeBracket.id, title: activeBracket.title, format: activeBracket.format, players: resolvedPlayers })
+                        }
+                      }}>
+                        {isActiveBracketGenerated ? 'Regenerate Bracket' : 'Generate Bracket'}
+                      </button>
+                      <span className="su-gen-meta">{FORMATS.find(f => f.id === activeBracket.format)?.label} · {activeBracket.players.length} players</span>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 
@@ -251,17 +395,18 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
 
             <AnimatePresence mode="wait">
 
-              {/* ── Lobby ── */}
+              {/* ── Group Lobby ── */}
               {s.activeGroupId === null && (
-                <motion.div key="lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <Section step="1" title={`Tournaments · ${s.groupSetups.length}/10`}>
+                <motion.div key="group-lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <Section step="1" title={`Active Groups · ${(s.groupSetups || []).length}/10`}>
                     <div className="su-lobby">
-                      {s.groupSetups.map(g => {
+                      {(s.groupSetups || []).map(g => {
                         const tournamentData = history.find(h => h.id === g.id)
                         const isGenerated    = !!tournamentData
                         const hasStage2      = !!(tournamentData?.stage2)
                         return (
-                          <div key={g.id} className={`su-lobby-card${isGenerated ? ' su-lobby-card--active' : ''}`}>
+                          <div key={g.id} className={`su-lobby-card${isGenerated ? ' su-lobby-card--active' : ''}`}
+                               onClick={() => isGenerated ? onOpenGroup(g.id, hasStage2 ? 'stage2' : 'groups') : set('activeGroupId', g.id)}>
                             <div className="su-lobby-card-top">
                               <div>
                                 <div className="su-lobby-title">{g.title}</div>
@@ -276,20 +421,22 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                             <div className="su-lobby-card-actions">
                               {isGenerated ? (
                                 <>
-                                  <button className="su-lbtn su-lbtn--stage1" onClick={() => onOpenGroup(g.id, 'groups')}>Stage 1</button>
-                                  {hasStage2 && <button className="su-lbtn su-lbtn--stage2" onClick={() => onOpenGroup(g.id, 'stage2')}>Stage 2</button>}
-                                  <button className="su-lbtn su-lbtn--edit" onClick={() => set('activeGroupId', g.id)}>Edit</button>
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <button className="su-lbtn su-lbtn--stage1" onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'groups') }}>Stg 1</button>
+                                    {hasStage2 && <button className="su-lbtn su-lbtn--stage2" onClick={(e) => { e.stopPropagation(); onOpenGroup(g.id, 'stage2') }}>Stg 2</button>}
+                                  </div>
+                                  <button className="su-lbtn su-lbtn--edit" onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id) }}>✎ Edit</button>
                                 </>
                               ) : (
-                                <button className="su-lbtn su-lbtn--open" onClick={() => set('activeGroupId', g.id)}>Configure →</button>
+                                <button className="su-lbtn su-lbtn--open" onClick={(e) => { e.stopPropagation(); set('activeGroupId', g.id) }}>Configure →</button>
                               )}
-                              <button className="su-lbtn su-lbtn--del" onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(g.id) }}>✕</button>
+                              <button className="su-lbtn su-lbtn--del" onClick={(e) => { e.stopPropagation(); setConfirmDeleteType('group'); setConfirmDeleteId(g.id) }}>✕</button>
                             </div>
                           </div>
                         )
                       })}
 
-                      {s.groupSetups.length < 10 && (
+                      {(s.groupSetups || []).length < 10 && (
                         <button className="su-lobby-new" onClick={handleCreateGroup}>
                           <span className="su-lobby-new-plus">+</span>
                           <span>New Tournament</span>
@@ -300,13 +447,13 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                 </motion.div>
               )}
 
-              {/* ── Configure group ── */}
+              {/* ── Configure Group ── */}
               {s.activeGroupId !== null && activeGroup && (
-                <motion.div key="configure" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <motion.div key="configure-group" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <div className="su-configure-header">
-                    <button className="su-back-btn" onClick={() => set('activeGroupId', null)}>← Back</button>
+                    <button className="su-back-btn" onClick={() => set('activeGroupId', null)}>← Back to Lobby</button>
                     <span className="su-configure-title">{activeGroup.title}</span>
-                    {isActiveGenerated && <span className="su-badge su-badge--live" style={{ marginLeft: 8 }}>Live</span>}
+                    {isActiveGroupGenerated && <span className="su-badge su-badge--live" style={{ marginLeft: 8 }}>Live</span>}
                   </div>
 
                   <Section step="2" title="Number of Players">
@@ -335,9 +482,7 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
 
                   {activeGroup.players.length > 0 && (
                     <Section step="4" title="Players & Tags"
-                      action={
-                        <button className="su-clear-btn" onClick={() => setConfirmClearGroup(true)}>Clear all</button>
-                      }>
+                      action={<button className="su-clear-btn" onClick={() => setConfirmClearNames(true)}>Clear all</button>}>
                       <div className="su-tag-legend">
                         {TAGS.map(t => (
                           <span key={t} className="su-tag-legend-item">
@@ -368,7 +513,7 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
 
                   {activeGroup.players.length >= 2 && (
                     <div className="su-generate-row su-generate-row--group">
-                      {isActiveGenerated && (() => {
+                      {isActiveGroupGenerated && (() => {
                         const td = history.find(h => h.id === activeGroup.id)
                         return (
                           <div className="su-open-btns">
@@ -378,16 +523,16 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
                         )
                       })()}
                       <button className="su-gen-btn" onClick={() => {
-                        if (isActiveGenerated) {
+                        if (isActiveGroupGenerated) {
                           setConfirmRegenerate(true)
                         } else {
                           const resolvedGroupPlayers = activeGroup.players.map((p, i) => ({ ...p, name: p.name || `Player ${i+1}` }))
                           onGroupStart({ id: activeGroup.id, title: activeGroup.title, players: resolvedGroupPlayers, groupSize: activeGroup.size })
                         }
                       }}>
-                        {isActiveGenerated ? 'Regenerate Groups' : 'Generate Groups'}
+                        {isActiveGroupGenerated ? 'Regenerate Groups' : 'Generate Groups'}
                       </button>
-                      <span className="su-gen-meta">{activeGroup.players.length} players · {activeGroup.size}/group · tag-matched</span>
+                      <span className="su-gen-meta">{activeGroup.players.length} players · {activeGroup.size}/group · snake-drafted</span>
                     </div>
                   )}
                 </motion.div>
@@ -407,13 +552,16 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
           <ConfirmModal
             msg="Delete this card and move the tournament results to History?"
             confirmLabel="Archive"
-            onConfirm={() => confirmDeleteGroupSetup(confirmDeleteId)}
-            onCancel={() => setConfirmDeleteId(null)}
+            onConfirm={() => {
+              if (confirmDeleteType === 'group') confirmDeleteGroupSetup(confirmDeleteId)
+              if (confirmDeleteType === 'bracket') confirmDeleteBracketSetup(confirmDeleteId)
+            }}
+            onCancel={() => { setConfirmDeleteId(null); setConfirmDeleteType(null) }}
           />
         )}
         {confirmReset && (
           <ConfirmModal
-            msg="Reset ALL setup data? This clears every draft, name list and group configuration. Tournament history is kept."
+            msg="Reset ALL setup data? This clears every draft, name list and configuration. Tournament history is kept."
             confirmLabel="Reset"
             onConfirm={() => { clearAll(); setConfirmReset(false) }}
             onCancel={() => setConfirmReset(false)}
@@ -421,25 +569,24 @@ export default function Setup({ onStart, onGroupStart, onOpenGroup, onArchiveGro
         )}
         {confirmClearNames && (
           <ConfirmModal
-            msg="Clear all player names? The player slots stay but every name will be wiped."
+            msg="Clear all player names in this setup? Slots are kept but every name will be wiped."
             confirmLabel="Clear"
-            onConfirm={() => { clearNames(); setConfirmClearNames(false) }}
+            onConfirm={() => {
+              if (s.mode === MODE_BRACKET) clearBracketNames()
+              else clearGroupNames()
+              setConfirmClearNames(false)
+            }}
             onCancel={() => setConfirmClearNames(false)}
-          />
-        )}
-        {confirmClearGroup && (
-          <ConfirmModal
-            msg="Clear all player names in this group setup? Slots are kept but every name will be wiped."
-            confirmLabel="Clear"
-            onConfirm={() => { clearGroupNames(); setConfirmClearGroup(false) }}
-            onCancel={() => setConfirmClearGroup(false)}
           />
         )}
         {confirmRegenerate && (
           <ConfirmModal
             msg="Regenerating will reset all match scores and results for this tournament. Continue?"
             confirmLabel="Regenerate"
-            onConfirm={doRegenerate}
+            onConfirm={() => {
+              if (s.mode === MODE_BRACKET) doRegenerateBracket()
+              else doRegenerateGroup()
+            }}
             onCancel={() => setConfirmRegenerate(false)}
           />
         )}

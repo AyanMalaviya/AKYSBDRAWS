@@ -61,14 +61,16 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                 ) : (
                   <>
                     <span className={`tag ${f?.color}`}>{f?.tag}</span>
-                    <span className="hcard-fmt">{f?.label}</span>
-                    {entry.champion && <span className="hcard-champ">🏆 {entry.champion.name}</span>}
+                    <span className="hcard-fmt">
+                      {entry.title || f?.label} 
+                      {entry.title && f?.label && <span style={{opacity: 0.6, fontSize: '0.85em', marginLeft: 6}}>({f.label})</span>}
+                    </span>
                   </>
                 )}
               </div>
               <div className="hcard-meta">
-                <span>👥 {entry.playerCount} players</span>
-                <span>🕒 {fmtDate(entry.savedAt)}</span>
+                <span>👥 {entry.players?.length || entry.playerCount} players</span>
+                <span>🕒 {fmtDate(entry.savedAt || entry.id)}</span>
               </div>
               
               {entry.champion && (
@@ -86,7 +88,7 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
               )}
 
               <div className="hcard-players" style={{ marginTop: entry.champion ? 8 : 12 }}>
-                {entry.players.slice(0, 6).map(p => {
+                {(entry.players || []).slice(0, 6).map(p => {
                   const isChamp = entry.champion?.id === p.id;
                   return (
                     <span key={p.id} className="p-chip" style={
@@ -97,7 +99,7 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                     </span>
                   )
                 })}
-                {entry.players.length > 6 && <span className="p-chip p-chip-more">+{entry.players.length-6}</span>}
+                {(entry.players || []).length > 6 && <span className="p-chip p-chip-more">+{(entry.players || []).length-6}</span>}
               </div>
               <div className="hcard-actions">
                 <button 

@@ -43,14 +43,12 @@ function seedKnockoutPlayers(players) {
 
 function getKnockoutStats(playerId, bracket) {
   let koWins = 0, koSD = 0, koGF = 0;
-  
   if (!bracket || !bracket.rounds) return { koWins, koSD, koGF };
 
   bracket.rounds.forEach(round => {
     round.forEach(m => {
       if (m.p1?.id === playerId || m.p2?.id === playerId) {
         if (m.winner?.id === playerId) koWins++;
-        
         if (m.score1 != null && m.score2 != null) {
           const myScore = m.p1?.id === playerId ? Number(m.score1) : Number(m.score2);
           const opScore = m.p1?.id === playerId ? Number(m.score2) : Number(m.score1);
@@ -60,7 +58,6 @@ function getKnockoutStats(playerId, bracket) {
       }
     });
   });
-  
   return { koWins, koSD, koGF };
 }
 
@@ -226,11 +223,19 @@ export default function App() {
     applyFrame(rootFrame)
   }, [applyFrame])
 
-  const handleStart = ({ format, players }) => {
+  const handleStart = ({ id, title, format, players }) => {
+    const newId = id || Date.now().toString()
+    
+    const seededPlayers = seedKnockoutPlayers(players)
+
     const t = {
-      id: Date.now().toString(), format, players,
-      bracket: generateBracket(format, players),
-      isArchived: true,
+      id: newId, 
+      type: format, 
+      title: title || 'Bracket Draw',
+      format, 
+      players: seededPlayers,
+      bracket: generateBracket(format, seededPlayers),
+      isArchived: false,
     }
     upsertHistory(t)
     stackRef.current = [HOME_FRAME]
@@ -554,6 +559,11 @@ export default function App() {
               onOpenGroup={(id, targetView = 'groups') => {
                 const entry = history.find(e => e.id === id)
                 if (entry) handleRestore(entry, entry.stage2 ? 'stage2' : targetView)
+                else alert('Tournament data not found in history.')
+              }}
+              onOpenBracket={(id) => {
+                const entry = history.find(e => e.id === id)
+                if (entry) handleRestore(entry, 'bracket')
                 else alert('Tournament data not found in history.')
               }}
               history={history}
