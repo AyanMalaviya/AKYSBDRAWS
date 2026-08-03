@@ -125,9 +125,10 @@ export function generateStage2Elim(players) {
   return generateDynamicElim(players, 'stage2_elim')
 }
 
-export function advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, byePlayerId = null) {
+export function advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, specialAction = null) {
   return produce(bracket, draft => {
-    if (byePlayerId) {
+    // ── ODD PLAYER RESOLUTION (BYE OR WILDCARD) ──
+    if (specialAction) {
       draft.pendingByeSelection = null
       let advancing = []
       let rn = 1
@@ -140,35 +141,50 @@ export function advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, byePla
         rn = roundIdx + 2
       }
       
-      const byePlayerIdx = advancing.findIndex(p => p.id === byePlayerId)
-      const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0]
-      
-      const seeded = seedKnockoutPlayers(advancing)
       const nextRoundMatches = []
-      
-      // Enforce BYE Match placement at the TOP (first bracket) with BYE on the bottom slot
-      const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, draft.type)
-      byeMatch.winner = byePlayer
-      byeMatch.isBye = true
-      nextRoundMatches.unshift(byeMatch)
 
-      for (let i = 0; i < seeded.length; i += 2) {
-        nextRoundMatches.push(makeMatch(seeded[i], seeded[i + 1] ?? null, rn, draft.type))
+      if (specialAction.type === 'wildcard') {
+        // WILDCARD MODE (NO BYE): Inject the lucky loser into the advancing pool.
+        // We override their tag to 'D' (Weakest) to ensure seedKnockoutPlayers 
+        // mathematically pairs them against the top 'A' player (the deserving bye).
+        const wildcardPlayer = { ...specialAction.player, tag: 'D' }
+        advancing.push(wildcardPlayer)
+        
+        const seeded = seedKnockoutPlayers(advancing)
+        for (let i = 0; i < seeded.length; i += 2) {
+          nextRoundMatches.push(makeMatch(seeded[i], seeded[i + 1] ?? null, rn, draft.type))
+        }
+      } 
+      else if (specialAction.type === 'bye') {
+        // BYE MODE: Extract the player to get the BYE and match them against an empty slot
+        const byePlayerIdx = advancing.findIndex(p => p.id === specialAction.playerId)
+        const byePlayer = advancing.splice(byePlayerIdx >= 0 ? byePlayerIdx : 0, 1)[0]
+        const seeded = seedKnockoutPlayers(advancing)
+        
+        const byeMatch = makeMatch(byePlayer, { id: 'bye', name: 'BYE' }, rn, draft.type)
+        byeMatch.winner = byePlayer
+        byeMatch.isBye = true
+        nextRoundMatches.unshift(byeMatch) // Force the BYE to the top of the column!
+
+        for (let i = 0; i < seeded.length; i += 2) {
+          nextRoundMatches.push(makeMatch(seeded[i], seeded[i + 1] ?? null, rn, draft.type))
+        }
       }
       
       draft.rounds.push(nextRoundMatches)
       return
     }
+
     _finalizeDynamicMatch(draft, roundIdx, matchIdx, winner, null, null)
   })
 }
 
-export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner, byeId) {
-  return advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, byeId)
+export function advanceWinnerSingleElim(bracket, roundIdx, matchIdx, winner, specialAction) {
+  return advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, specialAction)
 }
 
-export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, byeId) {
-  return advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, byeId)
+export function advanceWinnerStage2Elim(bracket, roundIdx, matchIdx, winner, specialAction) {
+  return advanceWinnerDynamic(bracket, roundIdx, matchIdx, winner, specialAction)
 }
 
 export function advanceSingleElimWithScore(bracket, roundIdx, matchIdx, score1, score2) {

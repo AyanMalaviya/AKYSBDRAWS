@@ -24,14 +24,12 @@ function pickByePlayer(players) {
 
 function getKnockoutStats(playerId, bracket) {
   let koWins = 0, koSD = 0, koGF = 0;
-  
   if (!bracket || !bracket.rounds) return { koWins, koSD, koGF };
 
   bracket.rounds.forEach(round => {
     round.forEach(m => {
       if (m.p1?.id === playerId || m.p2?.id === playerId) {
         if (m.winner?.id === playerId) koWins++;
-        
         if (m.score1 != null && m.score2 != null) {
           const myScore = m.p1?.id === playerId ? Number(m.score1) : Number(m.score2);
           const opScore = m.p1?.id === playerId ? Number(m.score2) : Number(m.score1);
@@ -41,53 +39,157 @@ function getKnockoutStats(playerId, bracket) {
       }
     });
   });
-  
   return { koWins, koSD, koGF };
 }
 
-function ByeSelectionUI({ bracket, players, onConfirm }) {
-  const enriched = useMemo(() => {
-    return bracket.pendingByeSelection.map(w => {
-      const src = players.find(p => p.id === w.id);
+// ── UPGRADED ODD PLAYER RESOLUTION UI ──
+function ByeSelectionUI({ bracket, advancers, allPlayers, onConfirm }) {
+  const [mode, setMode] = useState('bye')
+
+  // BYE LOGIC
+  const enrichedBye = useMemo(() => {
+    return advancers.map(w => {
+      const src = allPlayers.find(p => p.id === w.id) || w;
       const koStats = getKnockoutStats(w.id, bracket); 
-      return { ...(src || w), ...koStats };
+      return { ...src, ...koStats };
     })
-  }, [bracket.pendingByeSelection, players, bracket])
+  }, [advancers, allPlayers, bracket])
 
-  const suggested = useMemo(() => pickByePlayer(enriched), [enriched])
-  const [selectedId, setSelectedId] = useState('')
+  const suggestedBye = useMemo(() => pickByePlayer(enrichedBye), [enrichedBye])
+  const [selectedByeId, setSelectedByeId] = useState('')
 
-  useEffect(() => {
-    if (suggested) setSelectedId(suggested.id)
-  }, [suggested])
+  // WILDCARD LOGIC
+  const wildcardCandidates = useMemo(() => {
+    let candidates = []
+    
+    // Safely extract losers from the exact preceding round
+    if (bracket.rounds && bracket.rounds.length > 0) {
+      const lastRound = bracket.rounds[bracket.rounds.length - 1]
+      candidates = lastRound.map(m => {
+        if (!m.winner || m.winner === 'draw') return null;
+        if (m.winner.id === m.p1?.id) return m.p2;
+        if (m.winner.id === m.p2?.id) return m.p1;
+        return null;
+      }).filter(c => c && c.id !== 'bye')
+    } else {
+      // If Stage 2 just started, grab any non-advancing player from the universe
+      const advancerIds = new Set(advancers.map(p => p.id))
+      candidates = allPlayers.filter(p => p && p.id !== 'bye' && !advancerIds.has(p.id))
+    }
 
-  if (!bracket.pendingByeSelection) return null
+    // Enrich with stats and sort to explicitly place the BEST loser at the top
+    return candidates.map(c => {
+      const src = allPlayers.find(p => p.id === c.id) || c;
+      const koStats = getKnockoutStats(c.id, bracket);
+      return { ...src, ...koStats };
+    }).sort((a,b) => {
+      return ((b.koWins ?? b.wins ?? 0)            - (a.koWins ?? a.wins ?? 0))            ||
+             ((b.koSD ?? b.scoreDiff ?? b.sd ?? 0) - (a.koSD ?? a.scoreDiff ?? a.sd ?? 0)) ||
+             ((b.koGF ?? b.scoredFor ?? b.gf ?? 0) - (a.koGF ?? a.scoredFor ?? a.gf ?? 0)) ||
+             ((b.points ?? 0)                      - (a.points ?? 0))                      ||
+             (a.name ?? '').localeCompare(b.name ?? '')
+    })
+  }, [bracket, advancers, allPlayers])
+
+  const suggestedWildcard = wildcardCandidates[0]
+  const [selectedWildcardId, setSelectedWildcardId] = useState('')
+
+  useEffect(() => { if (suggestedBye) setSelectedByeId(suggestedBye.id) }, [suggestedBye])
+  useEffect(() => { if (suggestedWildcard) setSelectedWildcardId(suggestedWildcard.id) }, [suggestedWildcard])
+
+  if (!advancers || advancers.length === 0) return null
 
   return (
-    <div style={{ background: 'rgba(212,160,23,0.1)', border: '1px solid rgba(212,160,23,0.4)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-      <h3 style={{ marginTop: 0, color: 'var(--gold-light)', fontSize: 16 }}>Odd Number of Advancers</h3>
-      <p style={{ fontSize: 13, color: 'var(--white-soft)', marginBottom: 12 }}>
-        Select the player to receive a bye (Defaulted to highest Score Diff from this stage):
+    <div style={{ background: 'rgba(212,160,23,0.1)', border: '1px solid rgba(212,160,23,0.4)', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+      <h3 style={{ marginTop: 0, color: 'var(--gold-light)', fontSize: 18, marginBottom: 6 }}>
+        Odd Number of Advancers ({advancers.length})
+      </h3>
+      <p style={{ fontSize: 14, color: 'var(--white-soft)', marginBottom: 20, lineHeight: 1.5 }}>
+        You have an odd number of players advancing. You must either give one player a <strong>BYE</strong>, or bring back an eliminated player (<strong>NO BYE</strong>) to balance the bracket.
       </p>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <select 
-          value={selectedId} 
-          onChange={e => setSelectedId(e.target.value)}
-          style={{ flex: 1, padding: 10, borderRadius: 8, background: 'var(--surface2, rgba(20,20,30,0.8))', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
-        >
-          {enriched.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name} — Diff: {p.koSD ?? p.scoreDiff ?? 0} {p.id === suggested?.id ? '(Suggested)' : ''}
-            </option>
-          ))}
-        </select>
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
         <button 
-          onClick={() => onConfirm(selectedId)}
-          style={{ background: 'var(--gold-light)', color: '#000', padding: '10px 16px', borderRadius: 8, fontWeight: 800, cursor: 'pointer', border: 'none' }}
+          onClick={() => setMode('bye')} 
+          style={{ 
+            flex: 1, padding: '12px', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14, transition: 'all 0.2s',
+            background: mode === 'bye' ? 'var(--gold-light)' : 'rgba(255,255,255,0.05)', 
+            color: mode === 'bye' ? '#000' : 'var(--muted)', 
+            border: mode === 'bye' ? '2px solid var(--gold-light)' : '2px solid rgba(255,255,255,0.1)' 
+          }}
         >
-          Confirm Bye
+          ⏭️ Assign a BYE
         </button>
+        
+        {wildcardCandidates.length > 0 ? (
+          <button 
+            onClick={() => setMode('wildcard')} 
+            style={{ 
+              flex: 1, padding: '12px', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14, transition: 'all 0.2s',
+              background: mode === 'wildcard' ? 'var(--purple-light)' : 'rgba(255,255,255,0.05)', 
+              color: mode === 'wildcard' ? '#000' : 'var(--muted)', 
+              border: mode === 'wildcard' ? '2px solid var(--purple-light)' : '2px solid rgba(255,255,255,0.1)' 
+            }}
+          >
+            🛟 NO BYE (Return Best Loser)
+          </button>
+        ) : (
+          <button disabled style={{ flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', color: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.05)', cursor: 'not-allowed', fontSize: 14, fontWeight: 800 }}>
+             🛟 No Extra Players Available
+          </button>
+        )}
       </div>
+
+      {mode === 'bye' ? (
+        <div style={{ background: 'rgba(0,0,0,0.2)', padding: 16, borderRadius: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Select the player who will skip this round (Defaulted to highest scorer):</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <select 
+              value={selectedByeId} 
+              onChange={e => setSelectedByeId(e.target.value)}
+              style={{ flex: 1, padding: 12, borderRadius: 8, background: 'var(--surface2)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: 15 }}
+            >
+              {enrichedBye.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — Diff: {p.koSD ?? p.scoreDiff ?? 0} {p.id === suggestedBye?.id ? '(Suggested Best Player)' : ''}
+                </option>
+              ))}
+            </select>
+            <button 
+              onClick={() => onConfirm({ type: 'bye', playerId: selectedByeId })}
+              style={{ background: 'var(--gold-light)', color: '#000', padding: '12px 20px', borderRadius: 8, fontWeight: 900, cursor: 'pointer', border: 'none', fontSize: 15 }}
+            >
+              Confirm BYE →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: 'rgba(0,0,0,0.2)', padding: 16, borderRadius: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Select the eliminated player to return. They will be paired against the top player:</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <select 
+              value={selectedWildcardId} 
+              onChange={e => setSelectedWildcardId(e.target.value)}
+              style={{ flex: 1, padding: 12, borderRadius: 8, background: 'var(--surface2)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: 15 }}
+            >
+              {wildcardCandidates.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — Diff: {p.koSD ?? p.scoreDiff ?? 0} {p.id === suggestedWildcard?.id ? '(Suggested Best Loser)' : ''}
+                </option>
+              ))}
+            </select>
+            <button 
+              onClick={() => {
+                const wildcardPlayer = wildcardCandidates.find(c => c.id === selectedWildcardId);
+                onConfirm({ type: 'wildcard', player: wildcardPlayer })
+              }}
+              style={{ background: 'var(--purple-light)', color: '#000', padding: '12px 20px', borderRadius: 8, fontWeight: 900, cursor: 'pointer', border: 'none', fontSize: 15 }}
+            >
+              Confirm Wildcard →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -108,6 +210,18 @@ export default function App() {
   
   useEffect(() => { tournamentRef.current = tournament }, [tournament])
   useEffect(() => { groupsRef.current = groups }, [groups])
+
+  const allAvailablePlayers = useMemo(() => {
+    let pool = []
+    if (groups) pool = [...pool, ...groups.flatMap(g => g.players || [])]
+    if (tournament?.players) pool = [...pool, ...tournament.players]
+    const seen = new Set()
+    return pool.filter(p => {
+      if (!p || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [groups, tournament])
 
   const applyFrame = useCallback((frame) => {
     setView(frame.view)
@@ -482,8 +596,8 @@ export default function App() {
             className={`nav-pill${view === 'dashboard' ? ' active' : ''}`}
             onClick={handleDashboard}
           >
-            History {history.filter(h => h.isArchived).length > 0 &&
-              <span className="nav-count">{history.filter(h => h.isArchived).length}</span>}
+            History {history.filter(h => h && h.isArchived).length > 0 &&
+              <span className="nav-count">{history.filter(h => h && h.isArchived).length}</span>}
           </button>
           <BackupSync history={history} onHistoryChange={handleHistoryChange} />
         </nav>
@@ -520,14 +634,15 @@ export default function App() {
             {tournament.bracket?.pendingByeSelection && (
               <ByeSelectionUI 
                 bracket={tournament.bracket}
-                players={tournament.players}
-                onConfirm={(byeId) => {
+                advancers={tournament.bracket.pendingByeSelection}
+                allPlayers={allAvailablePlayers}
+                onConfirm={(actionPayload) => {
                   const rIdx = tournament.bracket.rounds.length > 0 ? tournament.bracket.rounds.length - 1 : 0
                   const nextBracket = advanceWinnerSingleElim(
                     tournament.bracket,
                     rIdx,
                     null, null,
-                    byeId
+                    actionPayload
                   )
                   handleBracketUpdate(nextBracket)
                 }}
@@ -602,14 +717,15 @@ export default function App() {
                 {renderStage2.bracket.pendingByeSelection && (
                   <ByeSelectionUI 
                     bracket={renderStage2.bracket}
-                    players={renderStage2.players}
-                    onConfirm={(byeId) => {
+                    advancers={renderStage2.bracket.pendingByeSelection}
+                    allPlayers={allAvailablePlayers}
+                    onConfirm={(actionPayload) => {
                       const rIdx = renderStage2.bracket.rounds.length > 0 ? renderStage2.bracket.rounds.length - 1 : 0
                       const nextBracket = advanceWinnerStage2Elim(
                         renderStage2.bracket,
                         rIdx,
                         null, null,
-                        byeId
+                        actionPayload
                       )
                       handleStage2BracketUpdate(nextBracket)
                     }}
