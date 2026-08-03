@@ -4,7 +4,7 @@ import BracketView from './components/BracketView.jsx'
 import GroupView from './components/GroupView.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Footer from './components/Footer.jsx'
-import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim } from './engine/bracketEngine.js'
+import { generateBracket, generateStage2Elim, advanceWinnerStage2Elim, advanceWinnerSingleElim, seedKnockoutPlayers } from './engine/bracketEngine.js'
 import BackupSync from './components/BackupSync.jsx'
 import { generateGroups, reassignTagsByStandings } from './engine/groupEngine.js'
 import { useHistory } from './hooks/useHistory.js'
@@ -22,33 +22,16 @@ function pickByePlayer(players) {
   )[0]
 }
 
-function seedKnockoutPlayers(players) {
-  const As = players.filter(p => p.tag === 'A')
-  const Bs = players.filter(p => p.tag === 'B')
-  const Cs = players.filter(p => p.tag === 'C')
-  const Ds = players.filter(p => !['A', 'B', 'C'].includes(p.tag))
-  const seeded = []
-  
-  while (As.length > 0 && Cs.length > 0) { seeded.push(As.shift(), Cs.shift()) }
-  while (As.length > 0 && Bs.length > 0) { seeded.push(As.shift(), Bs.shift()) }
-  while (Cs.length > 0 && Bs.length > 0) { seeded.push(Cs.shift(), Bs.shift()) }
-  while (Bs.length >= 2) { seeded.push(Bs.shift(), Bs.shift()) }
-  while (As.length > 0 && Ds.length > 0) { seeded.push(As.shift(), Ds.shift()) }
-  while (Bs.length > 0 && Ds.length > 0) { seeded.push(Bs.shift(), Ds.shift()) }
-  while (Cs.length > 0 && Ds.length > 0) { seeded.push(Cs.shift(), Ds.shift()) }
-  
-  seeded.push(...As, ...Bs, ...Cs, ...Ds)
-  return seeded
-}
-
 function getKnockoutStats(playerId, bracket) {
   let koWins = 0, koSD = 0, koGF = 0;
+  
   if (!bracket || !bracket.rounds) return { koWins, koSD, koGF };
 
   bracket.rounds.forEach(round => {
     round.forEach(m => {
       if (m.p1?.id === playerId || m.p2?.id === playerId) {
         if (m.winner?.id === playerId) koWins++;
+        
         if (m.score1 != null && m.score2 != null) {
           const myScore = m.p1?.id === playerId ? Number(m.score1) : Number(m.score2);
           const opScore = m.p1?.id === playerId ? Number(m.score2) : Number(m.score1);
@@ -58,6 +41,7 @@ function getKnockoutStats(playerId, bracket) {
       }
     });
   });
+  
   return { koWins, koSD, koGF };
 }
 
@@ -225,7 +209,6 @@ export default function App() {
 
   const handleStart = ({ id, title, format, players }) => {
     const newId = id || Date.now().toString()
-    
     const seededPlayers = seedKnockoutPlayers(players)
 
     const t = {
@@ -316,26 +299,7 @@ export default function App() {
       return
     }
 
-    let playersToSeed  = [...taggedAdvancers]
-    let round1ByePlayer = null
-    if (playersToSeed.length % 2 !== 0) {
-      round1ByePlayer = pickByePlayer(playersToSeed)
-      playersToSeed   = playersToSeed.filter(p => p.id !== round1ByePlayer.id)
-    }
-
-    const seededKnockout = seedKnockoutPlayers(playersToSeed)
-    if (round1ByePlayer) seededKnockout.push(round1ByePlayer)
-
-    let bracket = generateStage2Elim(seededKnockout)
-
-    if (bracket.pendingByeSelection) {
-      const enriched = bracket.pendingByeSelection.map(w => {
-        const original = taggedAdvancers.find(p => p.id === w.id)
-        return original ? { ...original, ...w } : w
-      })
-      const byePlayer = pickByePlayer(enriched)
-      if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
-    }
+    const bracket = generateStage2Elim(taggedAdvancers)
 
     const s2 = { type: 'knockout', players: taggedAdvancers, bracket }
     setTournament(prev => {
@@ -411,27 +375,7 @@ export default function App() {
       return
     }
 
-    let playersToSeed   = [...taggedAdvancers]
-    let round1ByePlayer = null
-    if (playersToSeed.length % 2 !== 0) {
-      round1ByePlayer = pickByePlayer(playersToSeed)
-      playersToSeed   = playersToSeed.filter(p => p.id !== round1ByePlayer.id)
-    }
-
-    const seededKnockout = seedKnockoutPlayers(playersToSeed)
-    if (round1ByePlayer) seededKnockout.push(round1ByePlayer)
-
-    let bracket = generateStage2Elim(seededKnockout)
-
-    if (bracket.pendingByeSelection) {
-      const enriched = bracket.pendingByeSelection.map(w => {
-        const original = taggedAdvancers.find(p => p.id === w.id)
-        return original ? { ...original, ...w } : w
-      })
-      const byePlayer = pickByePlayer(enriched)
-      if (byePlayer) bracket = advanceWinnerStage2Elim(bracket, bracket.rounds.length - 1, null, null, byePlayer.id)
-    }
-
+    const bracket = generateStage2Elim(taggedAdvancers)
     const s3 = { type: 'knockout', players: taggedAdvancers, bracket }
 
     setTournament(prev => {
@@ -571,8 +515,27 @@ export default function App() {
           </div>
         )}
 
+        {/* ── STAGE 1 BRACKET NOW WRAPPED WITH BYE-UI TO SUPPORT ROUND 1 BYES ── */}
         {view === 'bracket' && tournament && (
-          <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {tournament.bracket?.pendingByeSelection && (
+              <ByeSelectionUI 
+                bracket={tournament.bracket}
+                players={tournament.players}
+                onConfirm={(byeId) => {
+                  const rIdx = tournament.bracket.rounds.length > 0 ? tournament.bracket.rounds.length - 1 : 0
+                  const nextBracket = advanceWinnerSingleElim(
+                    tournament.bracket,
+                    rIdx,
+                    null, null,
+                    byeId
+                  )
+                  handleBracketUpdate(nextBracket)
+                }}
+              />
+            )}
+            <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
+          </div>
         )}
 
         {view === 'groups' && renderGroups && (
@@ -631,9 +594,10 @@ export default function App() {
                     bracket={renderStage2.bracket}
                     players={renderStage2.players}
                     onConfirm={(byeId) => {
+                      const rIdx = renderStage2.bracket.rounds.length > 0 ? renderStage2.bracket.rounds.length - 1 : 0
                       const nextBracket = advanceWinnerStage2Elim(
                         renderStage2.bracket,
-                        renderStage2.bracket.rounds.length - 1,
+                        rIdx,
                         null, null,
                         byeId
                       )

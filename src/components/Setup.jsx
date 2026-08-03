@@ -57,6 +57,7 @@ function TabBar({ active, onChange }) {
           key={t.id}
           className={`su-tab${active === t.id ? ' su-tab--active' : ''}`}
           onClick={() => onChange(t.id)}
+          style={{ minWidth: 160 }}
         >
           <span className="su-tab-icon">{t.icon}</span>
           <span>{t.label}</span>

@@ -2,15 +2,22 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 
-const fmtDate = (iso) => {
-  const d = new Date(iso)
+const fmtDate = (val) => {
+  if (!val) return 'Unknown Date'
+  
+  // FIX: If the string is purely digits (like Date.now().toString()), safely convert it to a Number so JS Date can parse it
+  const parsed = /^\d+$/.test(val) ? Number(val) : val
+  const d = new Date(parsed)
+  
+  if (isNaN(d.getTime())) return 'Unknown Date'
+  
   return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
     + ' · ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })
 }
 
 function ConfirmModal({ msg, onConfirm, onCancel }) {
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" style={{ zIndex: 1000 }}>
       <motion.div className="modal-box"
         initial={{ scale: 0.88, opacity: 0, y: 12 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -28,14 +35,16 @@ function ConfirmModal({ msg, onConfirm, onCancel }) {
 }
 
 export default function Dashboard({ history, onRestore, onDelete, onDeleteAll }) {
-  const [confirmId, setConfirmId]   = useState(null)
+  // FIX: Save the entire object instead of just the ID so corrupted items lacking an ID can still trigger the modal!
+  const [tournamentToDelete, setTournamentToDelete] = useState(null)
   const [confirmAllFlag, setAll]    = useState(false)
 
-  // Split history into Active and Archived
-  const activeTournaments = history.filter(entry => !entry.isArchived)
-  const archivedTournaments = history.filter(entry => entry.isArchived)
+  // Split history into Active and Archived, filtering out completely null entries
+  const safeHistory = history.filter(Boolean)
+  const activeTournaments = safeHistory.filter(entry => !entry.isArchived)
+  const archivedTournaments = safeHistory.filter(entry => entry.isArchived)
 
-  if (history.length === 0) return (
+  if (safeHistory.length === 0) return (
     <div className="empty-state">
       <div style={{ fontSize: 52, filter: 'grayscale(0.3)' }}>📂</div>
       <div style={{ fontSize: 18, fontWeight: 800 }}>No history yet</div>
@@ -47,9 +56,12 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
     <div className="history-grid">
       <AnimatePresence>
         {tournaments.map((entry, i) => {
+          // Fallback key so React doesn't crash on corrupted data
+          const entryId = entry.id || `corrupt-${i}`
           const f = FORMATS.find(x => x.id === entry.format)
+          
           return (
-            <motion.div key={entry.id} className="hcard"
+            <motion.div key={entryId} className="hcard"
               initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: i * 0.04 }}>
               <div className="hcard-top">
@@ -60,16 +72,14 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                   </>
                 ) : (
                   <>
-                    <span className={`tag ${f?.color}`}>{f?.tag}</span>
-                    <span className="hcard-fmt">
-                      {entry.title || f?.label} 
-                      {entry.title && f?.label && <span style={{opacity: 0.6, fontSize: '0.85em', marginLeft: 6}}>({f.label})</span>}
-                    </span>
+                    <span className={`tag ${f?.color || 'tag-blue'}`}>{f?.tag || 'UNK'}</span>
+                    <span className="hcard-fmt">{entry.title || f?.label || 'Unknown Bracket'}</span>
                   </>
                 )}
               </div>
               <div className="hcard-meta">
-                <span>👥 {entry.players?.length || entry.playerCount} players</span>
+                {/* Safe fallbacks in case player arrays are missing */}
+                <span>👥 {entry.playerCount || entry.players?.length || 0} players</span>
                 <span>🕒 {fmtDate(entry.savedAt || entry.id)}</span>
               </div>
               
@@ -88,14 +98,14 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
               )}
 
               <div className="hcard-players" style={{ marginTop: entry.champion ? 8 : 12 }}>
-                {(entry.players || []).slice(0, 6).map(p => {
-                  const isChamp = entry.champion?.id === p.id;
+                {(entry.players || []).slice(0, 6).map((p, pIdx) => {
+                  const isChamp = entry.champion?.id && entry.champion.id === p.id;
                   return (
-                    <span key={p.id} className="p-chip" style={
+                    <span key={p.id || pIdx} className="p-chip" style={
                       isChamp ? { background: 'rgba(255,215,0,0.2)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,215,0,0.4)' } : {}
                     }>
                       {isChamp && <span style={{ marginRight: 4 }}>🏆</span>}
-                      {p.name}
+                      {p.name || 'Unknown'}
                     </span>
                   )
                 })}
@@ -105,10 +115,12 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
                 <button 
                   className="btn btn-ghost btn-sm" 
                   onClick={() => onRestore(entry, entry.stage2 ? 'stage2' : 'groups')}
+                  disabled={!entry.id} // Prevent trying to restore a totally dead card
+                  style={{ opacity: !entry.id ? 0.5 : 1 }}
                 >
                   {isArchivedSection ? '↩ Restore' : '▶ Resume Live'}
                 </button>
-                <button className="btn btn-danger btn-sm" onClick={() => setConfirmId(entry.id)}>Delete</button>
+                <button className="btn btn-danger btn-sm" onClick={() => setTournamentToDelete(entry)}>Delete</button>
               </div>
             </motion.div>
           )
@@ -122,7 +134,7 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
       <div className="dash-header">
         <div>
           <div className="dash-title">Tournament Data</div>
-          <div className="dash-sub">{history.length} total saved tournament{history.length!==1?'s':''}</div>
+          <div className="dash-sub">{safeHistory.length} total saved tournament{safeHistory.length!==1?'s':''}</div>
         </div>
         <button className="btn btn-danger btn-sm" onClick={() => setAll(true)}>🗑 Clear All</button>
       </div>
@@ -146,16 +158,16 @@ export default function Dashboard({ history, onRestore, onDelete, onDeleteAll })
       )}
 
       <AnimatePresence>
-        {confirmId && (
+        {tournamentToDelete && (
           <ConfirmModal
             msg="Permanently delete this tournament? This cannot be undone."
-            onConfirm={() => { onDelete(confirmId); setConfirmId(null) }}
-            onCancel={() => setConfirmId(null)}
+            onConfirm={() => { onDelete(tournamentToDelete.id); setTournamentToDelete(null) }}
+            onCancel={() => setTournamentToDelete(null)}
           />
         )}
         {confirmAllFlag && (
           <ConfirmModal
-            msg={`Delete all ${history.length} tournaments? This cannot be undone.`}
+            msg={`Delete all ${safeHistory.length} tournaments? This cannot be undone.`}
             onConfirm={() => { onDeleteAll(); setAll(false) }}
             onCancel={() => setAll(false)}
           />
