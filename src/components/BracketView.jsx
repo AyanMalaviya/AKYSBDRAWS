@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import React, { Suspense, lazy, useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FORMATS } from '../engine/bracketEngine.js'
 import Scoreboard from './Scoreboard.jsx'
 
@@ -10,7 +10,6 @@ const SwissBracket      = lazy(() => import('./brackets/SwissBracket.jsx'))
 
 /**
  * Build standings for ONE round's worth of matches.
- * Only players in that round are included; stats are from that round only.
  */
 function buildRoundStandings(roundMatches) {
   const playerMap = {}
@@ -28,166 +27,214 @@ function buildRoundStandings(roundMatches) {
     ensure(match.p2)
     if (!match.winner || match.isBye) return
 
-    const winner = match.winner
-    const loser  = match.p1?.id === winner?.id ? match.p2 : match.p1
+    const winner = match.winner === 'draw' ? 'draw' : match.winner.id
+    const isP1Win = winner === match.p1.id
+    const isP2Win = winner === match.p2.id
 
-    if (winner && playerMap[winner.id]) {
-      playerMap[winner.id].wins++
-      playerMap[winner.id].points += 3
-      playerMap[winner.id].played++
-      if (match.score1 != null) {
-        const wFor = winner.id === match.p1?.id ? match.score1 : match.score2
-        const wAga = winner.id === match.p1?.id ? match.score2 : match.score1
-        playerMap[winner.id].scoredFor     += wFor
-        playerMap[winner.id].scoredAgainst += wAga
+    const p1 = playerMap[match.p1.id]
+    const p2 = playerMap[match.p2.id]
+
+    if (p1 && p2) {
+      if (match.score1 != null && match.score2 != null) {
+        p1.scoredFor += match.score1; p1.scoredAgainst += match.score2
+        p2.scoredFor += match.score2; p2.scoredAgainst += match.score1
       }
-    }
-    if (loser && loser.id !== 'bye' && playerMap[loser.id]) {
-      playerMap[loser.id].losses++
-      playerMap[loser.id].played++
-      if (match.score1 != null) {
-        const lFor = loser.id === match.p1?.id ? match.score1 : match.score2
-        const lAga = loser.id === match.p1?.id ? match.score2 : match.score1
-        playerMap[loser.id].scoredFor     += lFor
-        playerMap[loser.id].scoredAgainst += lAga
+      if (winner === 'draw') {
+        p1.draws++; p1.points++; p1.played++
+        p2.draws++; p2.points++; p2.played++
+      } else if (isP1Win) {
+        p1.wins++; p1.points += 3; p1.played++
+        p2.losses++; p2.played++
+      } else if (isP2Win) {
+        p2.wins++; p2.points += 3; p2.played++
+        p1.losses++; p1.played++
       }
     }
   })
 
-  const standings = Object.values(playerMap)
-  standings.forEach(p => { p.scoreDiff = p.scoredFor - p.scoredAgainst })
-  standings.sort((a, b) =>
-    (b.points    - a.points)    ||
-    (b.wins      - a.wins)      ||
+  const arr = Object.values(playerMap)
+  arr.forEach(s => { s.scoreDiff = s.scoredFor - s.scoredAgainst })
+  arr.sort((a, b) =>
+    (b.points - a.points) ||
     (b.scoreDiff - a.scoreDiff) ||
     (b.scoredFor - a.scoredFor) ||
     a.name.localeCompare(b.name)
   )
-  return standings
+  return arr
 }
 
-const ROUND_NAMES = ['Round 1','Round 2','Quarter-Finals','Semi-Finals','Final']
-function roundName(rIdx, total) {
-  const fromEnd = total - 1 - rIdx
-  const names   = ['Final', 'Semi-Finals', 'Quarter-Finals', 'Round of 16', 'Round of 32']
-  return names[fromEnd] ?? `Round ${rIdx + 1}`
-}
+// ── Advancer Selection Modal ──────────────────────────────────────────────
+function SelectAdvancersModal({ standings, defaultCount, onConfirm, onClose }) {
+  const [selected, setSelected] = useState(() => new Set(standings.slice(0, defaultCount).map(p => p.id)))
 
-/**
- * Converts any bracket type into the `groups` shape that Scoreboard.jsx expects.
- * For single/stage2 elim: one scoreboard group per round (current active round shown).
- */
-function bracketToGroups(bracket, format) {
-  if (!bracket) return []
+  const toggle = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const selectTop = (n) => setSelected(new Set(standings.slice(0, n).map(p => p.id)))
 
-  // ── Round Robin & Swiss: standings already exist ──────────────────
-  if (format === 'round_robin' || format === 'swiss') {
-    const standings = (bracket.standings || []).map(s => ({
-      ...s,
-      played:        s.played        ?? 0,
-      wins:          s.wins          ?? 0,
-      draws:         s.draws         ?? 0,
-      losses:        s.losses        ?? 0,
-      points:        s.points        ?? 0,
-      scoredFor:     s.scoredFor     ?? 0,
-      scoredAgainst: s.scoredAgainst ?? 0,
-      scoreDiff:     s.scoreDiff     ?? 0,
-    }))
-    const matches = (bracket.rounds || []).flat()
-    return [{ id: 'main', name: format === 'swiss' ? 'Swiss Standings' : 'Round Robin', players: standings, matches, standings }]
-  }
+  const count = selected.size
+  const posEmoji = ['🏆','⭐','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣']
 
-  // ── Double Elimination: cumulative overall standings ────────────────
-  if (format === 'double_elim') {
-    const playerMap = {}
-    const ensurePlayer = (p) => {
-      if (!p || p.id === 'bye') return
-      if (!playerMap[p.id]) playerMap[p.id] = {
-        id: p.id, name: p.name, tag: p.tag || null,
-        played: 0, wins: 0, draws: 0, losses: 0, points: 0,
-        scoredFor: 0, scoredAgainst: 0, scoreDiff: 0,
-      }
-    }
-    const processMatch = (match) => {
-      ensurePlayer(match.p1)
-      ensurePlayer(match.p2)
-      if (!match.winner || match.isBye) return
-      const winner = match.winner
-      const loser  = match.p1?.id === winner?.id ? match.p2 : match.p1
-      if (winner && playerMap[winner.id]) {
-        playerMap[winner.id].wins++
-        playerMap[winner.id].points += 3
-        playerMap[winner.id].played++
-        if (match.score1 != null) {
-          playerMap[winner.id].scoredFor     += winner.id === match.p1?.id ? match.score1 : match.score2
-          playerMap[winner.id].scoredAgainst += winner.id === match.p1?.id ? match.score2 : match.score1
-        }
-      }
-      if (loser && loser.id !== 'bye' && playerMap[loser.id]) {
-        playerMap[loser.id].losses++
-        playerMap[loser.id].played++
-        if (match.score1 != null) {
-          playerMap[loser.id].scoredFor     += loser.id === match.p1?.id ? match.score1 : match.score2
-          playerMap[loser.id].scoredAgainst += loser.id === match.p1?.id ? match.score2 : match.score1
-        }
-      }
-    }
-    ;(bracket.wRounds || []).flat().forEach(processMatch)
-    ;(bracket.lRounds || []).flat().forEach(processMatch)
-    if (bracket.grandFinal) processMatch(bracket.grandFinal)
-    const allPlayers = Object.values(playerMap)
-    allPlayers.forEach(p => { p.scoreDiff = p.scoredFor - p.scoredAgainst })
-    allPlayers.sort((a, b) => (b.points - a.points) || (b.wins - a.wins))
-    const allMatches = [
-      ...(bracket.wRounds || []).flat(),
-      ...(bracket.lRounds || []).flat(),
-      ...(bracket.grandFinal ? [bracket.grandFinal] : []),
-    ]
-    return [{ id: 'de_main', name: 'Overall Standings', players: allPlayers, matches: allMatches, standings: allPlayers }]
-  }
-
-  // ── Single Elim / Stage2 Elim: one group PER ROUND ─────────────────
-  // Show only the current active (last) round in the scoreboard.
-  // "Active round" = the last round that has at least one match with both
-  // players assigned (TBD-free), i.e. the round currently being played.
-  const rounds = bracket.rounds || []
-  if (rounds.length === 0) return []
-
-  // Find the furthest round that has real players (not all TBD)
-  let activeRoundIdx = 0
-  for (let r = 0; r < rounds.length; r++) {
-    const hasPlayers = rounds[r].some(m => m.p1 && m.p2)
-    if (hasPlayers) activeRoundIdx = r
-  }
-
-  const total = rounds.length
-  const activeMatches = rounds[activeRoundIdx]
-  const standings = buildRoundStandings(activeMatches)
-
-  if (standings.length === 0) return []
-
-  return [{
-    id: `round_${activeRoundIdx}`,
-    name: roundName(activeRoundIdx, total),
-    players: standings,
-    matches: activeMatches,
-    standings,
-  }]
-}
-
-export default function BracketView({ tournament, onUpdate }) {
-  const { format, bracket } = tournament
-  const fmt = FORMATS.find(f => f.id === format) || { label: 'Stage 2 & Stage 3', tag: 'S2', color: 'tag-blue' }
-
-  const scoreboardGroups = useMemo(() => bracketToGroups(bracket, format), [bracket, format])
+  const quickOptions = []
+  for (let n = 2; n <= Math.min(standings.length, 16); n += 2) quickOptions.push(n)
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        <span className={`tag ${fmt?.color}`}>{fmt?.tag}</span>
-        <span style={{ fontWeight: 800, fontSize: 16 }}>{fmt?.label}</span>
-        <span style={{ color: 'var(--muted)', fontSize: 13 }}>• {tournament.players.length} players</span>
+    <div className="modal-overlay" style={{ zIndex: 3000, alignItems: 'flex-start', paddingTop: 32 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94, y: 24 }}
+        style={{ background: 'rgba(16,14,31,0.98)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 20, padding: '24px 0 0', width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 0 60px rgba(139,92,246,0.18), 0 24px 64px rgba(0,0,0,0.7)' }}
+      >
+        <div style={{ padding: '0 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 17, color: 'var(--white-soft)' }}>🏆 Select Advancers</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>Players ranked by final leaderboard</div>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', padding: 4, lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            <div style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 99, padding: '4px 14px', fontSize: 13, fontWeight: 800, color: 'var(--purple-light)', flexShrink: 0 }}>{count} selected</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>Quick:</div>
+            {quickOptions.map(n => (
+              <button key={n} onClick={() => selectTop(n)} style={{ padding: '4px 11px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: count === n ? 'rgba(212,160,23,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${count === n ? 'rgba(212,160,23,0.5)' : 'rgba(255,255,255,0.1)'}`, color: count === n ? 'var(--gold-light)' : 'var(--muted)', transition: 'all 0.15s' }}>Top {n}</button>
+            ))}
+          </div>
+        </div>
 
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
+          {standings.map((p, globalRank) => {
+            const isSelected = selected.has(p.id)
+            return (
+              <button key={p.id} onClick={() => toggle(p.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, marginBottom: 6, cursor: 'pointer', textAlign: 'left', background: isSelected ? 'rgba(34,214,122,0.10)' : 'rgba(255,255,255,0.03)', border: `1px solid ${isSelected ? 'rgba(34,214,122,0.42)' : 'rgba(255,255,255,0.07)'}`, boxShadow: isSelected ? '0 0 12px rgba(34,214,122,0.09)' : 'none', transition: 'all 0.15s' }}>
+                <div style={{ width: 26, flexShrink: 0, textAlign: 'center', fontSize: 14 }}>
+                  {isSelected ? (posEmoji[Array.from(selected).indexOf(p.id)] || '✅') : <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>#{globalRank + 1}</span>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {p.wins}W {p.draws || 0}D {p.losses}L
+                    {p.scoreDiff != null && (p.scoredFor > 0 || p.scoredAgainst > 0) ? ` · SD ${p.scoreDiff > 0 ? '+' : ''}${p.scoreDiff}` : ''}
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: 8, padding: '3px 10px', fontSize: 13, fontWeight: 800, color: 'var(--gold-light)' }}>{p.points ?? 0} pts</div>
+                <div style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.18)'}`, background: isSelected ? 'rgba(34,214,122,0.25)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--green)', transition: 'all 0.15s' }}>{isSelected ? '✓' : ''}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+          <button className="btn btn-sm" style={{ flex: 2, background: count === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(34,214,122,0.14)', border: `1px solid ${count === 0 ? 'var(--border2)' : 'rgba(34,214,122,0.45)'}`, color: count === 0 ? 'var(--muted)' : 'var(--green)', fontWeight: 800, fontSize: 14, opacity: count === 0 ? 0.5 : 1, cursor: count === 0 ? 'not-allowed' : 'pointer', padding: '10px 0' }} disabled={count === 0} onClick={() => onConfirm(standings.filter(p => selected.has(p.id)))}>
+            Advance {count} Player{count !== 1 ? 's' : ''} →
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+// ── Stage 2 Launcher Panel ────────────────────────────────────────────────
+function Stage2Launcher({ bracket, onAdvance }) {
+  const [showModal, setShowModal] = useState(false)
+  const [stage2Type, setStage2Type] = useState('knockout')
+  const [confirmedAdvancers, setConfirmedAdvancers] = useState(null)
+
+  const standings = bracket.standings || []
+  const defaultSelectCount = Math.min(4, standings.length)
+  const finalAdvancerList = confirmedAdvancers || standings.slice(0, defaultSelectCount)
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 32, background: 'rgba(0,0,0,0.3)', borderRadius: 14, padding: '16px 20px', border: '1px solid rgba(212,160,23,0.25)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 20 }}>🏆</span>
+        <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--gold-light)' }}>Tournament Complete!</div>
+      </div>
+
+      <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+        <strong style={{ color: 'var(--white-soft)' }}>{finalAdvancerList.length} players</strong> selected to advance to Stage 2.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+        {[{ id: 'knockout', label: '🥊 Single Elimination', desc: 'Knockout bracket' }, { id: 'groups', label: '👥 New Group Stage', desc: 'Draw into new groups' }].map(opt => (
+          <button key={opt.id} onClick={() => setStage2Type(opt.id)}
+            style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 10, cursor: 'pointer', background: stage2Type === opt.id ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${stage2Type === opt.id ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.08)'}`, color: stage2Type === opt.id ? 'var(--purple-light)' : 'var(--muted)', transition: 'all 0.15s' }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{opt.label}</div>
+            <div style={{ fontSize: 11, marginTop: 2, opacity: 0.8 }}>{opt.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-sm" style={{ flex: 1, minWidth: 160, background: 'rgba(34,214,122,0.1)', border: '1px solid rgba(34,214,122,0.4)', color: 'var(--green)', fontWeight: 800 }}
+          onClick={() => setShowModal(true)}>
+          ✏️ Select Players
+        </button>
+        <button className="btn btn-primary btn-sm" style={{ flex: 2, minWidth: 180 }}
+          onClick={() => onAdvance(finalAdvancerList, stage2Type)}>
+          🚀 Launch Stage 2 →
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <SelectAdvancersModal
+            standings={standings}
+            defaultCount={defaultSelectCount}
+            onConfirm={(picked) => { setConfirmedAdvancers(picked); setShowModal(false) }}
+            onClose={() => setShowModal(false)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
+export default function BracketView({ tournament, onUpdate, onReset, onAdvanceToStage2, onGoToStage2, hasStage2 }) {
+  const format = tournament.format || tournament.bracket?.type
+  const bracket = tournament.bracket
+  const fmtMeta = FORMATS.find(f => f.id === format)
+
+  const scoreboardGroups = useMemo(() => {
+    if (!bracket || !bracket.rounds) return []
+    if (bracket.type === 'single_elim' || bracket.type === 'stage2_elim') {
+      const activeRound = bracket.rounds.find(r => r.some(m => !m.winner))
+      if (!activeRound) return []
+      const roundStandings = buildRoundStandings(activeRound)
+      if (roundStandings.length === 0) return []
+      
+      // FIX: Added 'players' and 'matches' fallbacks so Scoreboard.jsx doesn't crash on .length reductions
+      return [{ 
+        id: 'active_round', 
+        name: 'Active Round', 
+        standings: roundStandings,
+        players: roundStandings, 
+        matches: activeRound 
+      }]
+    }
+    return []
+  }, [bracket])
+
+  return (
+    <div className="bv-container" style={{ paddingBottom: 64 }}>
+      <div className="bv-header">
+        <div>
+          <div className="bv-title">{tournament.title || 'Bracket Draw'}</div>
+          <div className="bv-meta">
+            <span className={`tag ${fmtMeta?.color || 'tag-blue'}`}>{fmtMeta?.tag || 'SE'}</span>
+            <span>{fmtMeta?.label || 'Single Elimination'}</span>
+            <span style={{ opacity: 0.5 }}>•</span>
+            <span>{tournament.players?.length || 0} players</span>
+          </div>
+        </div>
+        
+        {/* Reset button hidden if Stage 2 is active to prevent destroying parent tournament accidentally */}
+        {!hasStage2 && (
+          <button className="btn btn-ghost btn-sm hide-mob" onClick={onReset} style={{ marginLeft: 'auto' }}>
+            ✕ Close
+          </button>
+        )}
+        
         {bracket.champion && (
           <motion.span
             initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -202,7 +249,6 @@ export default function BracketView({ tournament, onUpdate }) {
         )}
       </div>
 
-      {/* Scoreboard — shows only the active round's participants & stats */}
       {scoreboardGroups.length > 0 && (
         <Scoreboard groups={scoreboardGroups} />
       )}
@@ -214,8 +260,20 @@ export default function BracketView({ tournament, onUpdate }) {
         {format === 'stage2_elim' && <SingleElimBracket bracket={bracket} onUpdate={onUpdate} />}
         {format === 'double_elim' && <DoubleElimBracket bracket={bracket} onUpdate={onUpdate} />}
         {format === 'round_robin' && <RoundRobinBracket bracket={bracket} onUpdate={onUpdate} />}
-        {format === 'swiss'       && <SwissBracket bracket={bracket} onUpdate={onUpdate} players={tournament.players} />}
+        {format === 'swiss'       && <SwissBracket      bracket={bracket} onUpdate={onUpdate} />}
       </Suspense>
-    </motion.div>
+
+      {/* ── Leaderboard Bracket "Advance to Stage 2" Launcher ── */}
+      {bracket.champion && (format === 'round_robin' || format === 'swiss') && (
+         hasStage2 ? (
+           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 32, background: 'rgba(0,0,0,0.3)', borderRadius: 14, padding: '16px 20px', border: '1px solid rgba(212,160,23,0.25)' }}>
+             <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--gold-light)', marginBottom: 12 }}>Stage 2 has already been generated.</div>
+             <button className="btn btn-primary" style={{ width: '100%', fontWeight: 800 }} onClick={onGoToStage2}>🚀 Go to Stage 2 →</button>
+           </motion.div>
+         ) : (
+           <Stage2Launcher bracket={bracket} onAdvance={onAdvanceToStage2} />
+         )
+      )}
+    </div>
   )
 }

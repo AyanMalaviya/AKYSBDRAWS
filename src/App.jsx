@@ -515,7 +515,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── STAGE 1 BRACKET NOW WRAPPED WITH BYE-UI TO SUPPORT ROUND 1 BYES ── */}
         {view === 'bracket' && tournament && (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {tournament.bracket?.pendingByeSelection && (
@@ -534,7 +533,18 @@ export default function App() {
                 }}
               />
             )}
-            <BracketView tournament={tournament} onUpdate={handleBracketUpdate} onReset={handleHome} />
+            <BracketView 
+              tournament={tournament} 
+              onUpdate={handleBracketUpdate} 
+              onReset={handleHome} 
+              onAdvanceToStage2={handleAdvanceToStage2}
+              hasStage2={!!(tournament?.stage2)}
+              onGoToStage2={() => navigate('stage2', {
+                tournament: tournament,
+                groups: null,
+                stage2: tournament?.stage2,
+              })}
+            />
           </div>
         )}
 
